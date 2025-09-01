@@ -94,6 +94,9 @@ def list_spaces(active_only: bool = True) -> pd.DataFrame:
     if active_only:
         q = q.eq("is_active", True)
     data = q.execute().data or []
+    # >>> importante: manter as colunas esperadas, mesmo vazio
+    if not data:
+        return pd.DataFrame(columns=["key_number","room_name","location","is_active","category"])
     return pd.DataFrame(data)
 
 def update_space(key_number: int, room_name: str, location: str, is_active: bool, category: str = "Sala"):
@@ -1040,3 +1043,4 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
