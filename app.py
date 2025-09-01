@@ -20,8 +20,8 @@ from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.units import mm
 
 # ---------------- Config -------------------
-st.set_page_config(page_title="Sentinela – Controle de Chaves", layout="wide")
-APP_TITLE = "Sentinela – Controle de Chaves"
+st.set_page_config(page_title="SigaChaves – Unidade Rondon", layout="wide")
+APP_TITLE = "SigaChaves – Controle"
 
 ADMIN_PASS = st.secrets.get("STREAMLIT_ADMIN_PASS", os.getenv("STREAMLIT_ADMIN_PASS", ""))
 BASE_URL = st.secrets.get("BASE_URL", os.getenv("BASE_URL", "")).strip()
@@ -1062,6 +1062,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
