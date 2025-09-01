@@ -30,7 +30,7 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", os.geten
 
 CUTOFF_HOUR_FOR_OVERDUE = int(os.getenv("CUTOFF_HOUR_FOR_OVERDUE", st.secrets.get("CUTOFF_HOUR_FOR_OVERDUE", "23")))
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", st.secrets.get("TOKEN_TTL_MINUTES", "30")))
-QR_CHECK_AUTH_ON_CHECKOUT = str(os.getenv("QR_CHECK_AUTH_ON_CHECKOUT", st.secrets.get("QR_CHECK_AUTH_ON_CHECKOUT", "true"))).lower() == "true"
+QR_CHECK_AUTH_ON_CHECKOUT = str(os.getenv("QR_CHECK_AUTH_ON_CHECKOUT", st.secrets.get("QR_CHECK_AUTH_ON_CHECKOUT", "false"))).lower() == "true"
 
 # ---------------- Utils --------------------
 def supa() -> Client:
@@ -1043,5 +1043,6 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
