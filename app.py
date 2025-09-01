@@ -13,7 +13,7 @@ import streamlit as st
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import qrcode
-
+import base64
 from supabase import create_client, Client
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as pdf_canvas
@@ -76,6 +76,14 @@ def decode_bytea(x) -> Optional[bytes]:
         except Exception:
             return None
     return None
+
+def encode_bytea(x: Optional[bytes]) -> Optional[str]:
+    if not x:
+        return None
+    try:
+        return base64.b64encode(x).decode("ascii")
+    except Exception:
+        return None
 
 # --------- Data access (Supabase) ----------
 # spaces
@@ -270,6 +278,8 @@ def open_checkout(key_number: int, name: str, id_code: str, phone: str,
     if has_open_checkout(key_number):
         return False, "Esta chave já está EM USO. Faça a devolução antes de nova retirada."
 
+    sig_out_b64 = encode_bytea(signature_png) if signature_png else None
+    
     payload = {
         "key_number": key_number,
         "taken_by_name": name,
@@ -279,7 +289,7 @@ def open_checkout(key_number: int, name: str, id_code: str, phone: str,
         "due_time": due_time.isoformat() if due_time else None,
         "checkin_time": None,
         "status": "EM_USO",
-        "signature_out": signature_png if signature_png else None,
+        "signature_out": sig_out_b64,  # <- base64 aqui
         "signature_in": None
     }
     s = supa()
@@ -297,10 +307,12 @@ def do_checkin(key_number: int, signature_png: Optional[bytes]) -> Tuple[bool, s
         .is_("checkin_time","null").order("checkout_time", desc=True).limit(1).execute().data
     if not open_tx: return False, "Não há retirada em aberto para esta chave."
     tid = open_tx[0]["id"]
+    sig_in_b64 = encode_bytea(signature_png) if signature_png else None
+    
     s.table("transactions").update({
         "checkin_time": now_utc().isoformat(),
         "status": "DEVOLVIDA",
-        "signature_in": signature_png if signature_png else None
+        "signature_in": sig_in_b64  # <- base64 aqui
     }).eq("id", tid).execute()
     return True, tid
 
@@ -1044,6 +1056,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
