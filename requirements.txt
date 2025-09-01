@@ -1,0 +1,6 @@
+streamlit
+pandas
+pillow
+qrcode
+streamlit-drawable-canvas
+supabase>=2.6.0
