@@ -1,7 +1,11 @@
 # ==========================================
 # Sentinela – Controle de Chaves (Supabase)
+# + CSV Import (Espaços/Pessoas)
+# + Painel de Tokens (revogar)
+# + Recibo PDF por transação
+# + Remover chave
 # ==========================================
-import os, io, uuid, datetime, zipfile, secrets, string
+import os, io, uuid, datetime, zipfile, secrets, string, base64
 from typing import Optional, Tuple, List, Dict
 import pandas as pd
 import streamlit as st
@@ -10,7 +14,9 @@ from streamlit_drawable_canvas import st_canvas
 import qrcode
 
 from supabase import create_client, Client
-from base64 import b64encode
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas as pdf_canvas
+from reportlab.lib.units import mm
 
 # ---------------- Config -------------------
 st.set_page_config(page_title="Sentinela – Controle de Chaves", layout="wide")
@@ -29,6 +35,7 @@ QR_CHECK_AUTH_ON_CHECKOUT = str(os.getenv("QR_CHECK_AUTH_ON_CHECKOUT", st.secret
 # ---------------- Utils --------------------
 def supa() -> Client:
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        st.error("Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY em Secrets.")
         st.stop()
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -55,6 +62,19 @@ def build_url(base_url: str, params: dict) -> str:
 def gen_token_str(n: int = 28) -> str:
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(n))
+
+def decode_bytea(x) -> Optional[bytes]:
+    """Supabase (postgrest) retorna bytea como base64; streamlit DrawCanvas gera RGBA."""
+    if x is None:
+        return None
+    if isinstance(x, (bytes, bytearray)):
+        return bytes(x)
+    if isinstance(x, str):
+        try:
+            return base64.b64decode(x)
+        except Exception:
+            return None
+    return None
 
 # --------- Data access (Supabase) ----------
 # spaces
@@ -84,6 +104,15 @@ def update_space(key_number: int, room_name: str, location: str, is_active: bool
         "is_active": bool(is_active),
         "category": category
     }).eq("key_number", key_number).execute()
+
+def delete_space(key_number: int) -> Tuple[bool, str]:
+    """Remove chave. Só possível se não houver transações vinculadas (restrição do schema)."""
+    s = supa()
+    tx = s.table("transactions").select("id").eq("key_number", key_number).limit(1).execute().data
+    if tx:
+        return False, "Não é possível remover: existem transações vinculadas a esta chave."
+    s.table("spaces").delete().eq("key_number", key_number).execute()
+    return True, "Chave removida."
 
 def space_exists_and_active(key_number: int) -> bool:
     s = supa()
@@ -154,7 +183,7 @@ def add_person_to_authorization(authorization_id:str, person_id:str):
 def list_authorized_people_now(key_number:int) -> pd.DataFrame:
     s = supa()
     now = now_utc().isoformat()
-    # JOIN manual via 2 queries (simples e suficiente)
+    # autorizações do espaço com período válido (ou sem limites)
     auths = s.table("authorizations").select("id").eq("key_number", key_number)\
         .or_(f"valid_from.is.null,valid_from.lte.{now}")\
         .or_(f"valid_to.is.null,valid_to.gte.{now}")\
@@ -201,6 +230,24 @@ def validate_qr_token(token: str, action: str, key_number: int, person_id: Optio
 def consume_qr_token(token: str):
     s = supa()
     s.table("qr_tokens").update({"used_at": now_utc().isoformat()}).eq("token", token).is_("used_at", "null").execute()
+
+def list_tokens(status: str = "ativos") -> pd.DataFrame:
+    """status: 'ativos' (não usados e não expirados), 'expirados', 'usados'."""
+    s = supa()
+    now = now_utc().isoformat()
+    q = s.table("qr_tokens").select("*")
+    if status == "ativos":
+        q = q.is_("used_at","null").gte("expires_at", now)
+    elif status == "expirados":
+        q = q.is_("used_at","null").lt("expires_at", now)
+    elif status == "usados":
+        q = q.not_.is_("used_at","null")
+    data = q.order("created_at", desc=True).limit(500).execute().data or []
+    return pd.DataFrame(data)
+
+def revoke_token(token: str) -> None:
+    """Revogar = marcar usado agora."""
+    consume_qr_token(token)
 
 # transactions
 def has_open_checkout(key_number: int) -> bool:
@@ -259,13 +306,9 @@ def list_transactions(start: Optional[datetime.datetime] = None,
     q = s.table("transactions").select("*").order("checkout_time", desc=True)
     if start:
         q = q.gte("checkout_time", start.isoformat())
-    if end:
-        # usa COALESCE no cliente (limitação do postgrest em expressões complexas) – filtraremos depois
-        pass
     data = q.execute().data or []
     df = pd.DataFrame(data)
     if end and not df.empty:
-        # filtra no cliente pelo "fim" em checkin_time ou checkout_time
         def row_in(r):
             ct = pd.to_datetime(r.get("checkin_time") or r.get("checkout_time"))
             return ct.tz_localize(None) <= end.replace(tzinfo=None)
@@ -273,15 +316,12 @@ def list_transactions(start: Optional[datetime.datetime] = None,
     return df
 
 def list_status() -> pd.DataFrame:
-    # Junta spaces (ativos) com última transação de cada chave no cliente
     df_space = list_spaces(active_only=True)
     if df_space.empty:
         return pd.DataFrame(columns=["key_number","room_name","location","category","status","checkout_time","due_time","checkin_time"])
 
     s = supa()
-    # pega todas transações das chaves ativas (escala bem para dezenas/centenas)
     keys = df_space["key_number"].tolist()
-    # Melhor particionar se houver muitas:
     tx_all: List[Dict] = []
     chunk = 200
     for i in range(0, len(keys), chunk):
@@ -291,7 +331,6 @@ def list_status() -> pd.DataFrame:
         tx_all.extend(data)
     df_tx = pd.DataFrame(tx_all)
 
-    # pega a última por key_number
     if not df_tx.empty:
         df_tx["checkout_time_dt"] = pd.to_datetime(df_tx["checkout_time"])
         df_tx = df_tx.sort_values(["key_number","checkout_time_dt"], ascending=[True, False])\
@@ -306,7 +345,6 @@ def list_status() -> pd.DataFrame:
             return "DISPONÍVEL"
         if pd.isna(row["checkin_time"]):
             now = datetime.datetime.now()
-            # due_time passou?
             if pd.notna(row["due_time"]):
                 try:
                     due = pd.to_datetime(str(row["due_time"]))
@@ -314,7 +352,6 @@ def list_status() -> pd.DataFrame:
                         return "ATRASADA"
                 except Exception:
                     pass
-            # sem due → atraso às 23h do dia da retirada
             try:
                 co = pd.to_datetime(str(row["checkout_time"])).to_pydatetime().replace(tzinfo=None)
                 limit = co.replace(hour=CUTOFF_HOUR_FOR_OVERDUE, minute=0, second=0, microsecond=0)
@@ -327,6 +364,90 @@ def list_status() -> pd.DataFrame:
 
     df["status"] = df.apply(compute_status, axis=1)
     return df[["key_number","room_name","location","category","status","checkout_time","due_time","checkin_time"]].sort_values("key_number")
+
+# ------- Recibo PDF (por transação) --------
+def get_transaction(tid: str) -> Optional[dict]:
+    s = supa()
+    data = s.table("transactions").select("*").eq("id", tid).limit(1).execute().data
+    if not data:
+        return None
+    return data[0]
+
+def get_space(key_number: int) -> Optional[dict]:
+    s = supa()
+    data = s.table("spaces").select("*").eq("key_number", key_number).limit(1).execute().data
+    if not data:
+        return None
+    return data[0]
+
+def render_pdf_receipt(tx: dict) -> bytes:
+    """Gera PDF simples A4 com dados da transação; inclui assinaturas se existirem."""
+    key_number = tx["key_number"]
+    sp = get_space(key_number) or {}
+    room = sp.get("room_name", "")
+    loc  = sp.get("location", "")
+    cat  = sp.get("category", "")
+
+    out_sig = decode_bytea(tx.get("signature_out"))
+    in_sig  = decode_bytea(tx.get("signature_in"))
+
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(20*mm, h-25*mm, "Sentinela – Recibo de Movimentação de Chave")
+
+    c.setFont("Helvetica", 11)
+    y = h-40*mm
+    def line(lbl, val):
+        nonlocal y
+        c.drawString(20*mm, y, f"{lbl}: {val}"); y -= 8*mm
+
+    line("ID da transação", tx.get("id",""))
+    line("Chave", f"{key_number} – {room}")
+    line("Localização / Categoria", f"{loc} / {cat}")
+    line("Responsável", tx.get("taken_by_name",""))
+    line("ID / SIAPE", tx.get("taken_by_id",""))
+    line("Telefone", tx.get("taken_phone",""))
+    line("Retirada em", str(tx.get("checkout_time","")).replace("T"," ").replace("Z",""))
+    line("Prazo", str(tx.get("due_time","")).replace("T"," ").replace("Z",""))
+    line("Devolução em", str(tx.get("checkin_time","")).replace("T"," ").replace("Z",""))
+    line("Status", tx.get("status",""))
+
+    # Assinaturas
+    y -= 5*mm
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(20*mm, y, "Assinaturas")
+    y -= 10*mm
+    c.setFont("Helvetica", 10)
+
+    if out_sig:
+        try:
+            img_out = Image.open(io.BytesIO(out_sig)).convert("RGB")
+            out_path = io.BytesIO(); img_out.save(out_path, format="PNG"); out_path.seek(0)
+            c.drawImage(out_path, 20*mm, y-30*mm, width=60*mm, height=30*mm, preserveAspectRatio=True, mask='auto')
+            c.drawString(20*mm, y-32*mm, "Retirada")
+        except Exception:
+            c.drawString(20*mm, y, "(sem assinatura de retirada)")
+    else:
+        c.drawString(20*mm, y, "(sem assinatura de retirada)")
+
+    if in_sig:
+        try:
+            img_in = Image.open(io.BytesIO(in_sig)).convert("RGB")
+            in_path = io.BytesIO(); img_in.save(in_path, format="PNG"); in_path.seek(0)
+            c.drawImage(in_path, 100*mm, y-30*mm, width=60*mm, height=30*mm, preserveAspectRatio=True, mask='auto')
+            c.drawString(100*mm, y-32*mm, "Devolução")
+        except Exception:
+            c.drawString(100*mm, y, "(sem assinatura de devolução)")
+    else:
+        c.drawString(100*mm, y, "(sem assinatura de devolução)")
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf.read()
 
 # ------------------ UI ----------------------
 st.title(APP_TITLE)
@@ -362,7 +483,9 @@ public_qr_checkout = (not is_admin) and (qp_action == "retirar")  and qp_key and
 
 # Abas
 if is_admin:
-    tab_op, tab_cad, tab_rep, tab_qr = st.tabs(["Operação (Gestor)","Cadastros (Admin)","Relatórios (Admin)","QR Codes (Admin)"])
+    tab_op, tab_cad, tab_rep, tab_qr, tab_tokens, tab_pdf = st.tabs([
+        "Operação (Gestor)","Cadastros (Admin)","Relatórios (Admin)","QR Codes (Admin)","Tokens","Recibos PDF"
+    ])
 else:
     if public_qr_checkout and public_qr_return:
         tab_pub_checkout, tab_pub_return, tab_pub = st.tabs(["Retirada (QR)","Devolução (QR)","Relatórios públicos"])
@@ -530,7 +653,6 @@ def render_public_qr_return(qkey: int, token: Optional[str]):
     st.subheader("Devolução de chave (via QR)")
     if not space_exists_and_active(qkey):
         st.error("Chave não cadastrada/ativa."); return
-    # token é opcional para devolução
     if token:
         ok, msg = validate_qr_token(token, "devolver", qkey, None)
         if not ok: st.error(msg); return
@@ -571,7 +693,6 @@ def render_public_qr_checkout(qkey: int, pid: str, token: Optional[str]):
     if not ok:
         st.error(msg); return
 
-    # Política: QR pode ou não exigir autorização vigente
     if QR_CHECK_AUTH_ON_CHECKOUT:
         df_auth_now = list_authorized_people_now(qkey)
         if df_auth_now.empty or not (df_auth_now["id"] == pid).any():
@@ -618,7 +739,7 @@ def render_public_qr_checkout(qkey: int, pid: str, token: Optional[str]):
         ok, msg = open_checkout(int(qkey), prow["name"], prow.get("id_code",""), prow.get("phone",""), due_time, sig_bytes)
         if ok:
             consume_qr_token(token)
-            st.success(f"Retirada registrada. Protocolo: {msg}")
+            st.success(f"Retirada registrado. Protocolo: {msg}")
         else:
             st.error(msg)
 
@@ -643,18 +764,28 @@ if is_admin:
                 st.error("Informe o nome da Sala/Lab.")
 
         st.markdown("---")
-        des_key = st.number_input("Ativar/Desativar - Nº da chave", min_value=1, step=1, key="space_key_status")
-        des_active = st.selectbox("Status", ["Ativar","Desativar"], index=0, key="space_status_select")
-        if st.button("Aplicar status", key="space_status_apply"):
-            row = df_sp[df_sp["key_number"] == int(des_key)]
-            if row.empty: st.error("Chave não encontrada.")
-            else:
-                update_space(int(des_key),
-                             row.iloc[0]["room_name"],
-                             row.iloc[0]["location"] or "",
-                             True if des_active=="Ativar" else False,
-                             row.iloc[0].get("category","Sala"))
-                st.success("Status atualizado.")
+        col_del1, col_del2, col_del3 = st.columns([1,1,2])
+        with col_del1:
+            des_key = st.number_input("Ativar/Desativar - Nº da chave", min_value=1, step=1, key="space_key_status")
+        with col_del2:
+            des_active = st.selectbox("Status", ["Ativar","Desativar"], index=0, key="space_status_select")
+        with col_del3:
+            if st.button("Aplicar status", key="space_status_apply"):
+                row = df_sp[df_sp["key_number"] == int(des_key)]
+                if row.empty: st.error("Chave não encontrada.")
+                else:
+                    update_space(int(des_key),
+                                 row.iloc[0]["room_name"],
+                                 row.iloc[0]["location"] or "",
+                                 True if des_active=="Ativar" else False,
+                                 row.iloc[0].get("category","Sala"))
+                    st.success("Status atualizado.")
+
+        st.markdown("**Remover chave** (definitivo)")
+        rem_key = st.number_input("Nº da chave para remover", min_value=1, step=1, key="space_key_remove")
+        if st.button("Remover chave", key="space_remove_btn"):
+            ok, msg = delete_space(int(rem_key))
+            (st.success if ok else st.error)(msg)
 
         st.markdown("---")
         st.caption("Atalho: criar chaves 1..50 (categoria 'Sala').")
@@ -729,6 +860,40 @@ if is_admin:
                     ppl = s.table("persons").select("name,id_code,phone").in_("id", pids).execute().data or []
                     st.write("Vinculados:")
                     st.dataframe(pd.DataFrame(ppl), use_container_width=True)
+
+        st.markdown("___")
+        st.subheader("Importação CSV")
+        st.markdown("**Pessoas** — colunas aceitas: `name`, `id_code` (opcional), `phone` (opcional).")
+        up_people = st.file_uploader("CSV de Pessoas", type=["csv"], key="csv_people")
+        if up_people is not None:
+            dfp = pd.read_csv(up_people).fillna("")
+            if "name" not in dfp.columns:
+                st.error("CSV inválido: coluna 'name' é obrigatória.")
+            else:
+                st.dataframe(dfp.head(), use_container_width=True)
+                if st.button("Importar Pessoas", key="csv_people_import"):
+                    for _, r in dfp.iterrows():
+                        add_person(str(r["name"]).strip(), str(r.get("id_code","")).strip(), str(r.get("phone","")).strip())
+                    st.success(f"Importadas {len(dfp)} pessoas.")
+
+        st.markdown("**Espaços** — colunas aceitas: `key_number`, `room_name`, `location` (opcional), `category` (Sala/Laboratório/Secretaria, opcional).")
+        up_spaces = st.file_uploader("CSV de Espaços", type=["csv"], key="csv_spaces")
+        if up_spaces is not None:
+            dfs = pd.read_csv(up_spaces).fillna("")
+            ok_cols = {"key_number","room_name"}
+            if not ok_cols.issubset(set(dfs.columns)):
+                st.error("CSV inválido: colunas obrigatórias: key_number, room_name.")
+            else:
+                dfs["category"] = dfs.get("category", "Sala").replace("", "Sala")
+                st.dataframe(dfs.head(), use_container_width=True)
+                if st.button("Importar Espaços", key="csv_spaces_import"):
+                    for _, r in dfs.iterrows():
+                        try:
+                            add_space(int(r["key_number"]), str(r["room_name"]).strip(),
+                                      str(r.get("location","")).strip(), str(r.get("category","Sala")).strip() or "Sala")
+                        except Exception:
+                            pass
+                    st.success(f"Importados {len(dfs)} espaços.")
 
 # -------- Relatórios (Admin) --------
 if is_admin:
@@ -828,6 +993,40 @@ if is_admin:
                 st.download_button("Baixar QR (PNG)", data=to_png_bytes(img_checkout),
                                    file_name=f"qr_retirar_key{int(sel_key_checkout)}_{pid_val2[:8]}.png",
                                    key="qr_checkout_dl_admin")
+
+# -------- Tokens --------
+if is_admin:
+    with tab_tokens:
+        st.subheader("Painel de Tokens")
+        opt = st.radio("Filtrar", ["Ativos","Expirados","Usados"], horizontal=True, key="tok_filter")
+        st.caption("• **Ativos**: não usados e dentro da validade • **Expirados**: não usados e prazo vencido • **Usados**: já consumidos")
+        status_map = {"Ativos":"ativos", "Expirados":"expirados", "Usados":"usados"}
+        df_tk = list_tokens(status_map[opt])
+        if df_tk.empty:
+            st.info("Nenhum token encontrado.")
+        else:
+            st.dataframe(df_tk, use_container_width=True)
+            tok = st.text_input("Token para revogar", key="tok_revoke")
+            if st.button("Revogar token (marcar como usado)", key="tok_revoke_btn"):
+                if tok.strip():
+                    revoke_token(tok.strip())
+                    st.success("Token revogado (marcado como usado).")
+
+# -------- Recibos PDF --------
+if is_admin:
+    with tab_pdf:
+        st.subheader("Gerar Recibo PDF por ID de transação")
+        tid = st.text_input("ID da transação", key="pdf_tid")
+        if st.button("Gerar PDF", key="pdf_make_btn"):
+            if not tid.strip():
+                st.error("Informe o ID da transação.")
+            else:
+                tx = get_transaction(tid.strip())
+                if not tx:
+                    st.error("Transação não encontrada.")
+                else:
+                    pdf_bytes = render_pdf_receipt(tx)
+                    st.download_button("Baixar Recibo PDF", data=pdf_bytes, file_name=f"recibo_{tid.strip()}.pdf")
 
 # -------- Público: Retirada/Devolução/Relatórios --------
 if (not is_admin) and public_qr_checkout:
