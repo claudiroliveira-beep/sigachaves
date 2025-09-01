@@ -4,6 +4,7 @@
 # + Painel de Tokens (revogar)
 # + Recibo PDF por transação
 # + Remover chave
+# ajuste: atualização do app.py
 # ==========================================
 import os, io, uuid, datetime, zipfile, secrets, string, base64
 from typing import Optional, Tuple, List, Dict
@@ -1043,6 +1044,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
