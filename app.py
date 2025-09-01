@@ -607,7 +607,10 @@ if is_admin:
                         except Exception:
                             sig_bytes = None
                     ok, msg = open_checkout(int(key_number), taken_by_name, taken_by_id, taken_by_phone, due_time, sig_bytes)
-                    st.success(f"Chave {int(key_number)} entregue. Protocolo: {msg}") if ok else st.error(msg)
+                    if ok:
+                        st.success(f"Chave {int(key_number)} entregue. Protocolo: {msg}")
+                    else:
+                        st.error(msg)
             with col_t:
                 st.markdown("**QR de Retirada (pessoa específica, token)**")
                 dfp_all = list_persons(active_only=True)
@@ -643,7 +646,10 @@ if is_admin:
                     except Exception:
                         sig_bytes = None
                 ok, msg = do_checkin(int(key_number), sig_bytes)
-                st.success(f"Chave {int(key_number)} devolvida. Protocolo: {msg}") if ok else st.error(msg)
+                if ok:
+                    st.success(f"Chave {int(key_number)} devolvida. Protocolo: {msg}")
+                else:
+                    st.error(msg)
 
 # -------- Relatórios Públicos --------
 def render_public_reports():
@@ -1056,6 +1062,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
