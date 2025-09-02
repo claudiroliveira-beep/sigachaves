@@ -25,7 +25,7 @@ APP_TITLE = "SigaChaves – Unidade Rondon"
 
 st.markdown("""
 <style>
-/* Cabeçalhos e tabs */
+/* ====== Layout & Tabs ====== */
 .block-container { padding-top: 1.2rem; }
 .stTabs [data-baseweb="tab-list"] { gap: .5rem; }
 .stTabs [data-baseweb="tab"] {
@@ -33,26 +33,49 @@ st.markdown("""
 }
 .stTabs [aria-selected="true"] { background: #E3F2FD; }
 
-/* Badges de status */
+/* ====== Badges de Status ====== */
 .badge { display:inline-block; padding: .18rem .5rem; border-radius: .5rem;
-  font-size: .85rem; font-weight: 600; color: #fff; }
-.badge-ok  { background:#4CAF50; }   /* DISPONÍVEL */
-.badge-use { background:#2196F3; }   /* EM_USO */
-.badge-late{ background:#F44336; }   /* ATRASADA */
-.badge-off { background:#9E9E9E; }   /* INATIVA */
+  font-size: .85rem; font-weight: 600; color: #fff; line-height: 1.2; }
+.badge-ok   { background:#4CAF50; }   /* DISPONÍVEL */
+.badge-use  { background:#2196F3; }   /* EM USO */
+.badge-late { background:#F44336; }   /* ATRASADA */
+.badge-off  { background:#9E9E9E; }   /* INATIVA */
 
-/* Tabelas HTML: cabeçalho suave e listras */
+/* ====== Tabela Listrada ====== */
 .table-clean { border-collapse: collapse; width: 100%; }
-.table-clean th { background:#EDEFF5; text-align:left; padding:.6rem; }
+.table-clean th { background:#EDEFF5; text-align:left; padding:.6rem; font-weight:700; }
 .table-clean td { background:#fff; padding:.55rem; border-top:1px solid #F0F2F6; }
 .table-clean tr:nth-child(even) td { background:#FAFBFE; }
 
-/* Botões “danger” locais (use container com id) */
-#danger button, .danger button {
-  background:#F44336 !important; color:#fff !important; border:0 !important;
+/* ====== Botões por Classe (envolver em <div class="btn-...">) ====== */
+.btn-primary  button { background:#2196F3 !important; color:#fff !important; border:0 !important; }
+.btn-success  button { background:#4CAF50 !important; color:#fff !important; border:0 !important; }
+.btn-warning  button { background:#FF9800 !important; color:#fff !important; border:0 !important; }
+.btn-danger   button { background:#F44336 !important; color:#fff !important; border:0 !important; }
+.btn-secondary button{ background:#607D8B !important; color:#fff !important; border:0 !important; }
+
+/* Hover sutil */
+.btn-primary  button:hover,
+.btn-success  button:hover,
+.btn-warning  button:hover,
+.btn-danger   button:hover,
+.btn-secondary button:hover { filter: brightness(0.95); }
+
+/* ====== Download buttons dentro das classes ====== */
+.btn-primary  .stDownloadButton button,
+.btn-success  .stDownloadButton button,
+.btn-warning  .stDownloadButton button,
+.btn-danger   .stDownloadButton button,
+.btn-secondary .stDownloadButton button {
+  background: inherit !important; color: #fff !important; border: 0 !important;
 }
+
+/* ====== Estilo “danger” por id (compatível com bloco antigo) ====== */
+#danger button { background:#F44336 !important; color:#fff !important; border:0 !important; }
+#danger button:hover { filter: brightness(0.95); }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 ADMIN_PASS = st.secrets.get("STREAMLIT_ADMIN_PASS", os.getenv("STREAMLIT_ADMIN_PASS", ""))
@@ -661,6 +684,7 @@ if is_admin:
                                    background_color="#FFFFFF", height=180, width=500, drawing_mode="freedraw", key="sig_out")
             col_g, col_t = st.columns([1,1])
             with col_g:
+                st.markdown('<div class="btn-success">', unsafe_allow_html=True)
                 if st.button("Confirmar retirada", key="btn_checkout"):
                     sig_bytes = None
                     if canvas_out.image_data is not None:
@@ -674,6 +698,7 @@ if is_admin:
                         st.success(f"Chave {int(key_number)} entregue. Protocolo: {msg}")
                     else:
                         st.error(msg)
+                      st.markdown('</div>', unsafe_allow_html=True)
             with col_t:
                 st.markdown("**QR de Retirada (pessoa específica, token)**")
                 dfp_all = list_persons(active_only=True)
@@ -1144,6 +1169,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
