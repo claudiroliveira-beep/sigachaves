@@ -1,0 +1,7 @@
+[theme]
+# Paleta base
+primaryColor = "#2196F3"                # azul para ações principais
+backgroundColor = "#FFFFFF"             # fundo geral
+secondaryBackgroundColor = "#F5F7FB"    # cartões/boxes
+textColor = "#222222"
+font = "sans serif"
