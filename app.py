@@ -20,8 +20,8 @@ from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.units import mm
 
 # ---------------- Config -------------------
-st.set_page_config(page_title="SigaChaves – Unidade Rondon", layout="wide")
-APP_TITLE = "SigaChaves – Controle"
+st.set_page_config(page_title="SigaChaves – Controle", layout="wide")
+APP_TITLE = "SigaChaves – Unidade Rondon"
 
 st.markdown("""
 <style>
@@ -1144,6 +1144,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
