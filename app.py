@@ -685,7 +685,7 @@ if is_admin:
             col_g, col_t = st.columns([1,1])
             with col_g:
               st.markdown('<div class="btn-success">', unsafe_allow_html=True)
-                if st.button("Confirmar retirada", key="btn_checkout"):
+              if st.button("Confirmar retirada", key="btn_checkout"):
                     sig_bytes = None
                     if canvas_out.image_data is not None:
                         try:
@@ -1169,6 +1169,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
