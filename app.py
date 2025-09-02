@@ -698,7 +698,7 @@ if is_admin:
                         st.success(f"Chave {int(key_number)} entregue. Protocolo: {msg}")
                     else:
                         st.error(msg)
-                      st.markdown('</div>', unsafe_allow_html=True)
+              st.markdown('</div>', unsafe_allow_html=True)
             with col_t:
                 st.markdown("**QR de Retirada (pessoa específica, token)**")
                 dfp_all = list_persons(active_only=True)
@@ -1169,6 +1169,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
