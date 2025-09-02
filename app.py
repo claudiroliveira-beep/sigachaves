@@ -23,6 +23,38 @@ from reportlab.lib.units import mm
 st.set_page_config(page_title="SigaChaves – Unidade Rondon", layout="wide")
 APP_TITLE = "SigaChaves – Controle"
 
+st.markdown("""
+<style>
+/* Cabeçalhos e tabs */
+.block-container { padding-top: 1.2rem; }
+.stTabs [data-baseweb="tab-list"] { gap: .5rem; }
+.stTabs [data-baseweb="tab"] {
+  background: #F5F7FB; padding: .5rem 1rem; border-radius: .75rem; font-weight: 600;
+}
+.stTabs [aria-selected="true"] { background: #E3F2FD; }
+
+/* Badges de status */
+.badge { display:inline-block; padding: .18rem .5rem; border-radius: .5rem;
+  font-size: .85rem; font-weight: 600; color: #fff; }
+.badge-ok  { background:#4CAF50; }   /* DISPONÍVEL */
+.badge-use { background:#2196F3; }   /* EM_USO */
+.badge-late{ background:#F44336; }   /* ATRASADA */
+.badge-off { background:#9E9E9E; }   /* INATIVA */
+
+/* Tabelas HTML: cabeçalho suave e listras */
+.table-clean { border-collapse: collapse; width: 100%; }
+.table-clean th { background:#EDEFF5; text-align:left; padding:.6rem; }
+.table-clean td { background:#fff; padding:.55rem; border-top:1px solid #F0F2F6; }
+.table-clean tr:nth-child(even) td { background:#FAFBFE; }
+
+/* Botões “danger” locais (use container com id) */
+#danger button, .danger button {
+  background:#F44336 !important; color:#fff !important; border:0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 ADMIN_PASS = st.secrets.get("STREAMLIT_ADMIN_PASS", os.getenv("STREAMLIT_ADMIN_PASS", ""))
 BASE_URL = st.secrets.get("BASE_URL", os.getenv("BASE_URL", "")).strip()
 
@@ -32,6 +64,36 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", os.geten
 CUTOFF_HOUR_FOR_OVERDUE = int(os.getenv("CUTOFF_HOUR_FOR_OVERDUE", st.secrets.get("CUTOFF_HOUR_FOR_OVERDUE", "23")))
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", st.secrets.get("TOKEN_TTL_MINUTES", "30")))
 QR_CHECK_AUTH_ON_CHECKOUT = str(os.getenv("QR_CHECK_AUTH_ON_CHECKOUT", st.secrets.get("QR_CHECK_AUTH_ON_CHECKOUT", "false"))).lower() == "true"
+
+
+
+STATUS_MAP = {
+    "DISPONÍVEL": '<span class="badge badge-ok">DISPONÍVEL</span>',
+    "EM_USO":     '<span class="badge badge-use">EM USO</span>',
+    "ATRASADA":   '<span class="badge badge-late">ATRASADA</span>',
+    "INATIVA":    '<span class="badge badge-off">INATIVA</span>',
+}
+
+def render_status_table(df: pd.DataFrame):
+    if df.empty:
+        st.info("Sem registros.")
+        return
+    view = df.copy()
+    # renomeia para exibição
+    view = view.rename(columns={
+        "key_number":"Chave",
+        "room_name":"Sala/Lab",
+        "location":"Local",
+        "category":"Categoria",
+        "status":"Status"
+    })
+    # aplica badge no status
+    view["Status"] = view["Status"].map(lambda s: STATUS_MAP.get(str(s), str(s)))
+    # gera HTML com estilos definidos no CSS que já sugeri
+    html = view.to_html(escape=False, index=False, classes="table-clean")
+    st.markdown(html, unsafe_allow_html=True)
+
+
 
 # ---------------- Utils --------------------
 def supa() -> Client:
@@ -521,7 +583,8 @@ if is_admin:
         df_status = list_status()
         if sel_cat != "Todas":
             df_status = df_status[df_status["category"] == sel_cat]
-        st.dataframe(df_status, use_container_width=True)
+        #st.dataframe(df_status, use_container_width=True)
+        render_status_table(df_status)
         atrasadas = (df_status["status"] == "ATRASADA").sum()
         if atrasadas: st.error(f"⚠️ {atrasadas} chave(s) ATRASADA(s).")
 
@@ -803,11 +866,30 @@ if is_admin:
                                  row.iloc[0].get("category","Sala"))
                     st.success("Status atualizado.")
 
+        #st.markdown("**Remover chave** (definitivo)")
+        #rem_key = st.number_input("Nº da chave para remover", min_value=1, step=1, key="space_key_remove")
+        #if st.button("Remover chave", key="space_remove_btn"):
+        #    ok, msg = delete_space(int(rem_key))
+        #    (st.success if ok else st.error)(msg)
         st.markdown("**Remover chave** (definitivo)")
         rem_key = st.number_input("Nº da chave para remover", min_value=1, step=1, key="space_key_remove")
-        if st.button("Remover chave", key="space_remove_btn"):
-            ok, msg = delete_space(int(rem_key))
-            (st.success if ok else st.error)(msg)
+        
+        # container com estilo danger
+        st.markdown('<div id="danger">', unsafe_allow_html=True)
+        col_rm1, col_rm2 = st.columns([1, 3])
+        with col_rm1:
+            confirm_rm = st.checkbox("Confirmar remoção", key="space_remove_confirm")
+        with col_rm2:
+            if st.button("Remover chave", key="space_remove_btn"):
+                if not confirm_rm:
+                    st.warning("Marque “Confirmar remoção” para prosseguir.")
+                else:
+                    ok, msg = delete_space(int(rem_key))
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("---")
         st.caption("Atalho: criar chaves 1..50 (categoria 'Sala').")
@@ -1062,6 +1144,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
