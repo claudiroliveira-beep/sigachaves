@@ -601,7 +601,7 @@ else:
 if is_admin:
     with tab_op:
         st.subheader("Status das chaves")
-        cats = ["Todas","Sala","Laboratório","Secretaria"]
+        cats = ["Todas","Sala","Laboratório","Secretaria", "Coordenação"]
         sel_cat = st.selectbox("Filtrar por categoria", cats, index=0, key="op_cat")
         df_status = list_status()
         if sel_cat != "Todas":
@@ -1169,6 +1169,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
