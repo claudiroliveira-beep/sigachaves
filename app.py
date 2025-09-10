@@ -1040,13 +1040,9 @@ if is_admin:
         st.markdown("---")
         st.markdown("**Excluir responsável**")
         if not df_pe.empty:
-            df_pe = df_pe.copy()
-            df_pe["__label__"] = df_pe.apply(person_label, axis=1)
-            labels_del = df_pe["__label__"].tolist()
-            label_to_pid_del = dict(zip(df_pe["__label__"], df_pe["id"]))
-        
-            sel_label_del = st.selectbox("Pessoa para excluir", options=labels_del, key="del_select")
-            sel_pid_del   = label_to_pid_del[sel_label_del]
+            sel_name_del = st.selectbox("Pessoa para excluir", options=df_pe["name"].tolist(), key="del_select")
+            sel_row_del = df_pe[df_pe["name"] == sel_name_del].iloc[0]
+            sel_pid_del = sel_row_del["id"]
         
             st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
             col_d1, col_d2 = st.columns([1,3])
@@ -1061,6 +1057,7 @@ if is_admin:
                         if ok: st.success(msg)
                         else:  st.error(msg)
             st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
@@ -1290,6 +1287,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
