@@ -1101,42 +1101,42 @@ if is_admin:
                 st.success(f"Autorização criada: {aid}")
 
 
-      st.markdown("**Vincular pessoas à autorização**")
-      df_auths = list_authorizations(int(key_sel))
-      if df_auths.empty:
-          st.info("Nenhuma autorização criada para esta chave.")
-      else:
-          # rótulos legíveis para cada autorização
-          df_auths = df_auths.copy()
-          df_spaces_all = list_spaces(active_only=False)
-          df_auths["__label__"] = df_auths.apply(lambda r: authorization_label(r, df_spaces_all), axis=1)
-      
-          labels_auth = df_auths["__label__"].tolist()
-          map_label_to_id = dict(zip(df_auths["__label__"], df_auths["id"]))
-      
-          sel_label_auth = st.selectbox("Selecione a autorização", options=labels_auth, key="auth_sel")
-          sel_auth_id = map_label_to_id[sel_label_auth]
-      
-          dfp = list_persons(active_only=True)
-          if not dfp.empty:
-              # mostrar pessoas com rótulo legível também
-              dfp = dfp.copy()
-              dfp["__label__"] = dfp.apply(person_label, axis=1)
-              picked_labels = st.multiselect("Adicionar pessoas (ativas)", options=dfp["__label__"].tolist(), key="auth_people_sel")
-              if st.button("Adicionar à autorização", key="auth_people_add"):
-                  for lab in picked_labels:
-                      pid = dfp[dfp["__label__"] == lab].iloc[0]["id"]
-                      add_person_to_authorization(sel_auth_id, pid)
-                  st.success("Pessoas adicionadas.")
-      
-          # lista vinculados (nomes legíveis)
-          s = supa()
-          df_link = s.table("authorization_people").select("person_id").eq("authorization_id", sel_auth_id).execute().data or []
-          if df_link:
-              pids = [x["person_id"] for x in df_link]
-              ppl = s.table("persons").select("name,id_code,phone").in_("id", pids).execute().data or []
-              st.write("Vinculados:")
-              st.dataframe(pd.DataFrame(ppl), use_container_width=True)
+        st.markdown("**Vincular pessoas à autorização**")
+        df_auths = list_authorizations(int(key_sel))
+        if df_auths.empty:
+            st.info("Nenhuma autorização criada para esta chave.")
+        else:
+            # rótulos legíveis para cada autorização
+            df_auths = df_auths.copy()
+            df_spaces_all = list_spaces(active_only=False)
+            df_auths["__label__"] = df_auths.apply(lambda r: authorization_label(r, df_spaces_all), axis=1)
+        
+            labels_auth = df_auths["__label__"].tolist()
+            map_label_to_id = dict(zip(df_auths["__label__"], df_auths["id"]))
+        
+            sel_label_auth = st.selectbox("Selecione a autorização", options=labels_auth, key="auth_sel")
+            sel_auth_id = map_label_to_id[sel_label_auth]
+        
+            dfp = list_persons(active_only=True)
+            if not dfp.empty:
+                # mostrar pessoas com rótulo legível também
+                dfp = dfp.copy()
+                dfp["__label__"] = dfp.apply(person_label, axis=1)
+                picked_labels = st.multiselect("Adicionar pessoas (ativas)", options=dfp["__label__"].tolist(), key="auth_people_sel")
+                if st.button("Adicionar à autorização", key="auth_people_add"):
+                    for lab in picked_labels:
+                        pid = dfp[dfp["__label__"] == lab].iloc[0]["id"]
+                        add_person_to_authorization(sel_auth_id, pid)
+                    st.success("Pessoas adicionadas.")
+        
+            # lista vinculados (nomes legíveis)
+            s = supa()
+            df_link = s.table("authorization_people").select("person_id").eq("authorization_id", sel_auth_id).execute().data or []
+            if df_link:
+                pids = [x["person_id"] for x in df_link]
+                ppl = s.table("persons").select("name,id_code,phone").in_("id", pids).execute().data or []
+                st.write("Vinculados:")
+                st.dataframe(pd.DataFrame(ppl), use_container_width=True)
  
     
         st.markdown("___")
@@ -1327,6 +1327,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
