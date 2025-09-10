@@ -1010,29 +1010,43 @@ if is_admin:
             else:
                 st.error("Informe o nome.")
 
-        st.markdown("**Editar responsável**")
-        if not df_pe.empty:
-            sel_pid = st.selectbox("Selecione", options=df_pe["id"].tolist(), key="edit_select")
-            prow = df_pe[df_pe["id"] == sel_pid].iloc[0]
-            en   = st.text_input("Nome", value=prow["name"], key="edit_nome")
-            eidc = st.text_input("SIAPE / Matrícula", value=prow.get("id_code",""), key="edit_idcode")
-            eph  = st.text_input("Telefone", value=prow.get("phone",""), key="edit_phone")
-            epin = st.text_input("PIN (4–6 dígitos, opcional)", value=str(prow.get("pin","") or ""), key="edit_pin")
-            est  = st.selectbox("Status", ["Ativo","Inativo"], index=0 if prow["is_active"] else 1, key="edit_status")
-            if st.button("Atualizar responsável", key="edit_person_btn"):
-                pin_clean = (epin or "").strip()
-                if pin_clean and not (pin_clean.isdigit() and 4 <= len(pin_clean) <= 6):
-                    st.error("PIN inválido. Use apenas números (4 a 6 dígitos).")
-                else:
-                    update_person(sel_pid, en.strip(), eidc.strip(), eph.strip(), True if est=="Ativo" else False, pin_clean if pin_clean else None)
-                    st.success("Responsável atualizado.")
+      st.markdown("**Editar responsável**")
+      if not df_pe.empty:
+          # Opções legíveis (Nome • SIAPE • Telefone) mapeando de volta para o ID
+          df_pe = df_pe.copy()
+          df_pe["__label__"] = df_pe.apply(person_label, axis=1)
+          labels = df_pe["__label__"].tolist()
+          label_to_pid = dict(zip(df_pe["__label__"], df_pe["id"]))
+      
+          sel_label = st.selectbox("Selecione", options=labels, key="edit_select")
+          sel_pid   = label_to_pid[sel_label]
+          prow      = df_pe[df_pe["id"] == sel_pid].iloc[0]
+      
+          en   = st.text_input("Nome", value=prow["name"], key="edit_nome")
+          eidc = st.text_input("SIAPE / Matrícula", value=prow.get("id_code",""), key="edit_idcode")
+          eph  = st.text_input("Telefone", value=prow.get("phone",""), key="edit_phone")
+          epin = st.text_input("PIN (4–6 dígitos, opcional)", value=str(prow.get("pin","") or ""), key="edit_pin")
+          est  = st.selectbox("Status", ["Ativo","Inativo"], index=0 if prow["is_active"] else 1, key="edit_status")
+      
+          if st.button("Atualizar responsável", key="edit_person_btn"):
+              pin_clean = (epin or "").strip()
+              if pin_clean and not (pin_clean.isdigit() and 4 <= len(pin_clean) <= 6):
+                  st.error("PIN inválido. Use apenas números (4 a 6 dígitos).")
+              else:
+                  update_person(sel_pid, en.strip(), eidc.strip(), eph.strip(), True if est=="Ativo" else False, pin_clean if pin_clean else None)
+                  st.success("Responsável atualizado.")
+
 
         st.markdown("---")
         st.markdown("**Excluir responsável**")
         if not df_pe.empty:
-            sel_name_del = st.selectbox("Pessoa para excluir", options=df_pe["name"].tolist(), key="del_select")
-            sel_row_del = df_pe[df_pe["name"] == sel_name_del].iloc[0]
-            sel_pid_del = sel_row_del["id"]
+            df_pe = df_pe.copy()
+            df_pe["__label__"] = df_pe.apply(person_label, axis=1)
+            labels_del = df_pe["__label__"].tolist()
+            label_to_pid_del = dict(zip(df_pe["__label__"], df_pe["id"]))
+        
+            sel_label_del = st.selectbox("Pessoa para excluir", options=labels_del, key="del_select")
+            sel_pid_del   = label_to_pid_del[sel_label_del]
         
             st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
             col_d1, col_d2 = st.columns([1,3])
@@ -1047,6 +1061,7 @@ if is_admin:
                         if ok: st.success(msg)
                         else:  st.error(msg)
             st.markdown('</div>', unsafe_allow_html=True)
+
 
 
         st.markdown("___")
@@ -1275,4 +1290,5 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
