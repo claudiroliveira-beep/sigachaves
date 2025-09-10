@@ -3,17 +3,19 @@
 # + CSV Import (Espaços/Pessoas)
 # + Painel de Tokens (revogar)
 # + Recibo PDF por transação
-# + Remover chave
-# ajuste: atualização do app.py
+# + Remover chave / Excluir responsável
+# + PIN (4–6 dígitos) por pessoa e validação no QR
+# + Hash (SHA-256) das assinaturas
+# + Status mostra Responsável (EM_USO/ATRASADA)
 # ==========================================
-import os, io, uuid, datetime, zipfile, secrets, string, base64
+import os, io, uuid, datetime, zipfile, secrets, string, base64, hashlib
 from typing import Optional, Tuple, List, Dict
+import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import qrcode
-import base64
 from supabase import create_client, Client
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as pdf_canvas
@@ -22,6 +24,7 @@ from reportlab.lib.units import mm
 # ---------------- Config -------------------
 st.set_page_config(page_title="SigaChaves – Controle", layout="wide")
 APP_TITLE = "SigaChaves – Unidade Rondon"
+CATEGORIES = ["Sala", "Sala de Aula", "Laboratório", "Secretaria", "Coordenação", "Copa"]
 
 st.markdown("""
 <style>
@@ -76,8 +79,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-
 ADMIN_PASS = st.secrets.get("STREAMLIT_ADMIN_PASS", os.getenv("STREAMLIT_ADMIN_PASS", ""))
 BASE_URL = st.secrets.get("BASE_URL", os.getenv("BASE_URL", "")).strip()
 
@@ -87,8 +88,6 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", os.geten
 CUTOFF_HOUR_FOR_OVERDUE = int(os.getenv("CUTOFF_HOUR_FOR_OVERDUE", st.secrets.get("CUTOFF_HOUR_FOR_OVERDUE", "23")))
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", st.secrets.get("TOKEN_TTL_MINUTES", "30")))
 QR_CHECK_AUTH_ON_CHECKOUT = str(os.getenv("QR_CHECK_AUTH_ON_CHECKOUT", st.secrets.get("QR_CHECK_AUTH_ON_CHECKOUT", "false"))).lower() == "true"
-
-
 
 STATUS_MAP = {
     "DISPONÍVEL": '<span class="badge badge-ok">DISPONÍVEL</span>',
@@ -102,7 +101,10 @@ def render_status_table(df: pd.DataFrame):
         st.info("Sem registros.")
         return
     view = df.copy()
-    # renomeia para exibição
+    view["Responsável"] = view.apply(
+        lambda r: (r.get("taken_by_name") or "") if r.get("status") in ["EM_USO","ATRASADA"] else "",
+        axis=1
+    )
     view = view.rename(columns={
         "key_number":"Chave",
         "room_name":"Sala/Lab",
@@ -110,13 +112,11 @@ def render_status_table(df: pd.DataFrame):
         "category":"Categoria",
         "status":"Status"
     })
-    # aplica badge no status
     view["Status"] = view["Status"].map(lambda s: STATUS_MAP.get(str(s), str(s)))
-    # gera HTML com estilos definidos no CSS que já sugeri
-    html = view.to_html(escape=False, index=False, classes="table-clean")
+    html = view[["Chave","Sala/Lab","Local","Categoria","Status","Responsável"]].to_html(
+        escape=False, index=False, classes="table-clean"
+    )
     st.markdown(html, unsafe_allow_html=True)
-
-
 
 # ---------------- Utils --------------------
 def supa() -> Client:
@@ -170,6 +170,25 @@ def encode_bytea(x: Optional[bytes]) -> Optional[str]:
     except Exception:
         return None
 
+def sha256_hex(b: Optional[bytes]) -> Optional[str]:
+    if not b:
+        return None
+    return hashlib.sha256(b).hexdigest()
+
+def has_signature(canvas_image_data) -> bool:
+    """True se há traço no canvas (evita aceitar assinatura em branco)."""
+    try:
+        if canvas_image_data is None:
+            return False
+        arr = np.array(canvas_image_data).astype("uint8")
+        if arr.ndim != 3 or arr.shape[2] < 3:
+            return False
+        rgb = arr[:, :, :3]
+        non_white = np.any(rgb < 250, axis=2)
+        return bool(np.sum(non_white) > 50)  # mais que 50 pixels não-brancos
+    except Exception:
+        return False
+
 # --------- Data access (Supabase) ----------
 # spaces
 def add_space(key_number: int, room_name: str, location: str = "", category: str = "Sala"):
@@ -188,7 +207,6 @@ def list_spaces(active_only: bool = True) -> pd.DataFrame:
     if active_only:
         q = q.eq("is_active", True)
     data = q.execute().data or []
-    # >>> importante: manter as colunas esperadas, mesmo vazio
     if not data:
         return pd.DataFrame(columns=["key_number","room_name","location","is_active","category"])
     return pd.DataFrame(data)
@@ -217,14 +235,17 @@ def space_exists_and_active(key_number: int) -> bool:
     return bool(data)
 
 # persons
-def add_person(name: str, id_code: str = "", phone: str = ""):
+def add_person(name: str, id_code: str = "", phone: str = "", pin: Optional[str] = None):
     s = supa()
-    s.table("persons").insert({
+    payload = {
         "name": name,
         "id_code": id_code,
         "phone": phone,
         "is_active": True
-    }).execute()
+    }
+    if pin:
+        payload["pin"] = pin
+    s.table("persons").insert(payload).execute()
 
 def list_persons(active_only: bool = True) -> pd.DataFrame:
     s = supa()
@@ -234,14 +255,30 @@ def list_persons(active_only: bool = True) -> pd.DataFrame:
     data = q.execute().data or []
     return pd.DataFrame(data)
 
-def update_person(pid: str, name: str, id_code: str, phone: str, is_active: bool):
+def update_person(pid: str, name: str, id_code: str, phone: str, is_active: bool, pin: Optional[str] = None):
     s = supa()
-    s.table("persons").update({
+    payload = {
         "name": name,
         "id_code": id_code,
         "phone": phone,
         "is_active": bool(is_active)
-    }).eq("id", pid).execute()
+    }
+    if pin is not None:
+        payload["pin"] = pin if pin else None
+    s.table("persons").update(payload).eq("id", pid).execute()
+
+def delete_person(pid: str) -> Tuple[bool, str]:
+    s = supa()
+    try:
+        # limpa vínculos (se não houver CASCADE)
+        try:
+            s.table("authorization_people").delete().eq("person_id", pid).execute()
+        except Exception:
+            pass
+        s.table("persons").delete().eq("id", pid).execute()
+        return True, "Responsável excluído."
+    except Exception:
+        return False, "Não foi possível excluir (verifique vínculos/permite CASCADE)."
 
 def get_person(pid: str) -> Optional[pd.Series]:
     s = supa()
@@ -364,7 +401,8 @@ def open_checkout(key_number: int, name: str, id_code: str, phone: str,
         return False, "Esta chave já está EM USO. Faça a devolução antes de nova retirada."
 
     sig_out_b64 = encode_bytea(signature_png) if signature_png else None
-    
+    sig_out_hash = sha256_hex(signature_png) if signature_png else None
+
     payload = {
         "key_number": key_number,
         "taken_by_name": name,
@@ -374,8 +412,10 @@ def open_checkout(key_number: int, name: str, id_code: str, phone: str,
         "due_time": due_time.isoformat() if due_time else None,
         "checkin_time": None,
         "status": "EM_USO",
-        "signature_out": sig_out_b64,  # <- base64 aqui
-        "signature_in": None
+        "signature_out": sig_out_b64,
+        "signature_out_hash": sig_out_hash,
+        "signature_in": None,
+        "signature_in_hash": None
     }
     s = supa()
     try:
@@ -393,11 +433,13 @@ def do_checkin(key_number: int, signature_png: Optional[bytes]) -> Tuple[bool, s
     if not open_tx: return False, "Não há retirada em aberto para esta chave."
     tid = open_tx[0]["id"]
     sig_in_b64 = encode_bytea(signature_png) if signature_png else None
-    
+    sig_in_hash = sha256_hex(signature_png) if signature_png else None
+
     s.table("transactions").update({
         "checkin_time": now_utc().isoformat(),
         "status": "DEVOLVIDA",
-        "signature_in": sig_in_b64  # <- base64 aqui
+        "signature_in": sig_in_b64,
+        "signature_in_hash": sig_in_hash
     }).eq("id", tid).execute()
     return True, tid
 
@@ -419,7 +461,7 @@ def list_transactions(start: Optional[datetime.datetime] = None,
 def list_status() -> pd.DataFrame:
     df_space = list_spaces(active_only=True)
     if df_space.empty:
-        return pd.DataFrame(columns=["key_number","room_name","location","category","status","checkout_time","due_time","checkin_time"])
+        return pd.DataFrame(columns=["key_number","room_name","location","category","status","checkout_time","due_time","checkin_time","taken_by_name","taken_by_id"])
 
     s = supa()
     keys = df_space["key_number"].tolist()
@@ -427,7 +469,7 @@ def list_status() -> pd.DataFrame:
     chunk = 200
     for i in range(0, len(keys), chunk):
         sub = keys[i:i+chunk]
-        data = s.table("transactions").select("key_number,checkout_time,due_time,checkin_time,status")\
+        data = s.table("transactions").select("key_number,checkout_time,due_time,checkin_time,status,taken_by_name,taken_by_id")\
             .in_("key_number", sub).order("checkout_time", desc=True).execute().data or []
         tx_all.extend(data)
     df_tx = pd.DataFrame(tx_all)
@@ -437,9 +479,12 @@ def list_status() -> pd.DataFrame:
         df_tx = df_tx.sort_values(["key_number","checkout_time_dt"], ascending=[True, False])\
                      .groupby("key_number", as_index=False).first()
     else:
-        df_tx = pd.DataFrame(columns=["key_number","checkout_time","due_time","checkin_time","status"])
+        df_tx = pd.DataFrame(columns=["key_number","checkout_time","due_time","checkin_time","status","taken_by_name","taken_by_id"])
 
-    df = df_space.merge(df_tx[["key_number","checkout_time","due_time","checkin_time"]], on="key_number", how="left")
+    df = df_space.merge(
+        df_tx[["key_number","checkout_time","due_time","checkin_time","taken_by_name","taken_by_id"]],
+        on="key_number", how="left"
+    )
 
     def compute_status(row):
         if pd.isna(row["checkout_time"]):
@@ -464,7 +509,11 @@ def list_status() -> pd.DataFrame:
         return "DISPONÍVEL"
 
     df["status"] = df.apply(compute_status, axis=1)
-    return df[["key_number","room_name","location","category","status","checkout_time","due_time","checkin_time"]].sort_values("key_number")
+    return df[[
+        "key_number","room_name","location","category",
+        "status","checkout_time","due_time","checkin_time",
+        "taken_by_name","taken_by_id"
+    ]].sort_values("key_number")
 
 # ------- Recibo PDF (por transação) --------
 def get_transaction(tid: str) -> Optional[dict]:
@@ -601,12 +650,11 @@ else:
 if is_admin:
     with tab_op:
         st.subheader("Status das chaves")
-        cats = ["Todas","Sala","Laboratório","Secretaria", "Coordenação"]
+        cats = ["Todas"] + CATEGORIES
         sel_cat = st.selectbox("Filtrar por categoria", cats, index=0, key="op_cat")
         df_status = list_status()
         if sel_cat != "Todas":
             df_status = df_status[df_status["category"] == sel_cat]
-        #st.dataframe(df_status, use_container_width=True)
         render_status_table(df_status)
         atrasadas = (df_status["status"] == "ATRASADA").sum()
         if atrasadas: st.error(f"⚠️ {atrasadas} chave(s) ATRASADA(s).")
@@ -679,26 +727,28 @@ if is_admin:
 
         # Assinatura + Ações do gestor
         if modo == "Retirar":
-            st.caption("Assinatura – Entrega da chave (Gestor)")
+            st.caption("Assinatura do responsável (quem retira)")
             canvas_out = st_canvas(fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#000000",
                                    background_color="#FFFFFF", height=180, width=500, drawing_mode="freedraw", key="sig_out")
             col_g, col_t = st.columns([1,1])
             with col_g:
-              st.markdown('<div class="btn-success">', unsafe_allow_html=True)
-              if st.button("Confirmar retirada", key="btn_checkout"):
-                    sig_bytes = None
-                    if canvas_out.image_data is not None:
+                st.markdown('<div class="btn-success">', unsafe_allow_html=True)
+                if st.button("Confirmar retirada", key="btn_checkout"):
+                    if not has_signature(canvas_out.image_data):
+                        st.warning("Assinatura obrigatória de quem retira a chave.")
+                    else:
+                        sig_bytes = None
                         try:
                             img = Image.fromarray((canvas_out.image_data).astype("uint8"))
                             sig_bytes = to_png_bytes(img)
                         except Exception:
                             sig_bytes = None
-                    ok, msg = open_checkout(int(key_number), taken_by_name, taken_by_id, taken_by_phone, due_time, sig_bytes)
-                    if ok:
-                        st.success(f"Chave {int(key_number)} entregue. Protocolo: {msg}")
-                    else:
-                        st.error(msg)
-              st.markdown('</div>', unsafe_allow_html=True)
+                        ok, msg = open_checkout(int(key_number), taken_by_name, taken_by_id, taken_by_phone, due_time, sig_bytes)
+                        if ok:
+                            st.success(f"Chave {int(key_number)} entregue. Protocolo: {msg}")
+                        else:
+                            st.error(msg)
+                st.markdown('</div>', unsafe_allow_html=True)
             with col_t:
                 st.markdown("**QR de Retirada (pessoa específica, token)**")
                 dfp_all = list_persons(active_only=True)
@@ -742,12 +792,12 @@ if is_admin:
 # -------- Relatórios Públicos --------
 def render_public_reports():
     st.subheader("Status das chaves")
-    cats = ["Todas","Sala","Laboratório","Secretaria"]
+    cats = ["Todas"] + CATEGORIES
     sel_cat = st.selectbox("Filtrar por categoria", cats, index=0, key="pub_cat")
     df_status = list_status()
     if sel_cat != "Todas":
         df_status = df_status[df_status["category"] == sel_cat]
-    st.dataframe(df_status[["key_number","room_name","location","category","status"]], use_container_width=True)
+    st.dataframe(df_status[["key_number","room_name","location","category","status","taken_by_name"]], use_container_width=True)
     atrasadas = (df_status["status"] == "ATRASADA").sum()
     if atrasadas: st.error(f"⚠️ {atrasadas} chave(s) ATRASADA(s).")
 
@@ -835,17 +885,32 @@ def render_public_qr_checkout(qkey: int, pid: str, token: Optional[str]):
     else:
         due_time = None
 
-    st.caption("Assinatura – Confirmação de retirada")
+    user_pin = st.text_input("PIN de verificação (fornecido no cadastro)", type="password", max_chars=6, key="qr_pin")
+
+    st.caption("Assinatura do responsável (quem retira)")
     canvas_out = st_canvas(fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#000000",
                            background_color="#FFFFFF", height=180, width=500, drawing_mode="freedraw", key="sig_out_public")
     if st.button("Confirmar retirada", key="btn_checkout_public"):
+        # valida PIN
+        expected_pin = str(prow.get("pin","") or "")
+        if not expected_pin:
+            st.error("PIN não configurado para esta pessoa. Procure o gestor.")
+            return
+        if (user_pin or "").strip() != expected_pin:
+            st.error("PIN incorreto.")
+            return
+
+        # valida assinatura
+        if not has_signature(canvas_out.image_data):
+            st.warning("Assinatura obrigatória de quem retira a chave.")
+            return
+
         sig_bytes = None
-        if canvas_out.image_data is not None:
-            try:
-                img = Image.fromarray((canvas_out.image_data).astype("uint8"))
-                sig_bytes = to_png_bytes(img)
-            except Exception:
-                sig_bytes = None
+        try:
+            img = Image.fromarray((canvas_out.image_data).astype("uint8"))
+            sig_bytes = to_png_bytes(img)
+        except Exception:
+            sig_bytes = None
         ok, msg = open_checkout(int(qkey), prow["name"], prow.get("id_code",""), prow.get("phone",""), due_time, sig_bytes)
         if ok:
             consume_qr_token(token)
@@ -865,7 +930,7 @@ if is_admin:
         with c1: sp_key = st.number_input("Nº da chave", min_value=1, step=1, key="space_key_add")
         with c2: sp_name = st.text_input("Nome da Sala/Lab", key="space_name_add")
         with c3: sp_loc = st.text_input("Localização (opcional)", key="space_loc_add")
-        with c4: sp_cat = st.selectbox("Categoria", ["Sala","Laboratório","Secretaria"], key="space_cat_add")
+        with c4: sp_cat = st.selectbox("Categoria", CATEGORIES, key="space_cat_add")
         if st.button("Salvar/Atualizar espaço", key="space_save"):
             if sp_name.strip():
                 add_space(int(sp_key), sp_name.strip(), sp_loc.strip(), sp_cat)
@@ -891,15 +956,8 @@ if is_admin:
                                  row.iloc[0].get("category","Sala"))
                     st.success("Status atualizado.")
 
-        #st.markdown("**Remover chave** (definitivo)")
-        #rem_key = st.number_input("Nº da chave para remover", min_value=1, step=1, key="space_key_remove")
-        #if st.button("Remover chave", key="space_remove_btn"):
-        #    ok, msg = delete_space(int(rem_key))
-        #    (st.success if ok else st.error)(msg)
         st.markdown("**Remover chave** (definitivo)")
         rem_key = st.number_input("Nº da chave para remover", min_value=1, step=1, key="space_key_remove")
-        
-        # container com estilo danger
         st.markdown('<div id="danger">', unsafe_allow_html=True)
         col_rm1, col_rm2 = st.columns([1, 3])
         with col_rm1:
@@ -929,14 +987,19 @@ if is_admin:
         st.dataframe(df_pe, use_container_width=True)
 
         st.markdown("**Adicionar responsável**")
-        p1, p2, p3 = st.columns(3)
+        p1, p2, p3, p4 = st.columns(4)
         with p1: pn = st.text_input("Nome", key="add_nome")
         with p2: pidc = st.text_input("SIAPE / Matrícula", key="add_idcode")
         with p3: pph = st.text_input("Telefone", key="add_phone")
+        with p4: ppin = st.text_input("PIN (4–6 dígitos, opcional)", key="add_pin")
         if st.button("Salvar responsável", key="add_person_btn"):
             if pn.strip():
-                add_person(pn.strip(), pidc.strip(), pph.strip())
-                st.success("Responsável adicionado.")
+                pin_clean = (ppin or "").strip()
+                if pin_clean and not (pin_clean.isdigit() and 4 <= len(pin_clean) <= 6):
+                    st.error("PIN inválido. Use apenas números (4 a 6 dígitos).")
+                else:
+                    add_person(pn.strip(), pidc.strip(), pph.strip(), pin_clean if pin_clean else None)
+                    st.success("Responsável adicionado.")
             else:
                 st.error("Informe o nome.")
 
@@ -947,10 +1010,33 @@ if is_admin:
             en   = st.text_input("Nome", value=prow["name"], key="edit_nome")
             eidc = st.text_input("SIAPE / Matrícula", value=prow.get("id_code",""), key="edit_idcode")
             eph  = st.text_input("Telefone", value=prow.get("phone",""), key="edit_phone")
+            epin = st.text_input("PIN (4–6 dígitos, opcional)", value=str(prow.get("pin","") or ""), key="edit_pin")
             est  = st.selectbox("Status", ["Ativo","Inativo"], index=0 if prow["is_active"] else 1, key="edit_status")
             if st.button("Atualizar responsável", key="edit_person_btn"):
-                update_person(sel_pid, en.strip(), eidc.strip(), eph.strip(), True if est=="Ativo" else False)
-                st.success("Responsável atualizado.")
+                pin_clean = (epin or "").strip()
+                if pin_clean and not (pin_clean.isdigit() and 4 <= len(pin_clean) <= 6):
+                    st.error("PIN inválido. Use apenas números (4 a 6 dígitos).")
+                else:
+                    update_person(sel_pid, en.strip(), eidc.strip(), eph.strip(), True if est=="Ativo" else False, pin_clean if pin_clean else None)
+                    st.success("Responsável atualizado.")
+
+        st.markdown("---")
+        st.markdown("**Excluir responsável**")
+        if not df_pe.empty:
+            sel_pid_del = st.selectbox("Pessoa para excluir", options=df_pe["id"].tolist(), key="del_select")
+            st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
+            col_d1, col_d2 = st.columns([1,3])
+            with col_d1:
+                confirm_del = st.checkbox("Confirmar exclusão", key="del_confirm")
+            with col_d2:
+                if st.button("Excluir responsável", key="del_person_btn"):
+                    if not confirm_del:
+                        st.warning("Marque “Confirmar exclusão” para prosseguir.")
+                    else:
+                        ok, msg = delete_person(sel_pid_del)
+                        if ok: st.success(msg)
+                        else:  st.error(msg)
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("___")
         st.subheader("Autorizações por espaço")
@@ -992,7 +1078,7 @@ if is_admin:
 
         st.markdown("___")
         st.subheader("Importação CSV")
-        st.markdown("**Pessoas** — colunas aceitas: `name`, `id_code` (opcional), `phone` (opcional).")
+        st.markdown("**Pessoas** — colunas aceitas: `name`, `id_code` (opcional), `phone` (opcional), `pin` (opcional).")
         up_people = st.file_uploader("CSV de Pessoas", type=["csv"], key="csv_people")
         if up_people is not None:
             dfp = pd.read_csv(up_people).fillna("")
@@ -1002,10 +1088,16 @@ if is_admin:
                 st.dataframe(dfp.head(), use_container_width=True)
                 if st.button("Importar Pessoas", key="csv_people_import"):
                     for _, r in dfp.iterrows():
-                        add_person(str(r["name"]).strip(), str(r.get("id_code","")).strip(), str(r.get("phone","")).strip())
+                        pin_val = str(r.get("pin","")).strip()
+                        add_person(
+                            str(r["name"]).strip(),
+                            str(r.get("id_code","")).strip(),
+                            str(r.get("phone","")).strip(),
+                            pin_val if (pin_val.isdigit() and 4 <= len(pin_val) <= 6) else None
+                        )
                     st.success(f"Importadas {len(dfp)} pessoas.")
 
-        st.markdown("**Espaços** — colunas aceitas: `key_number`, `room_name`, `location` (opcional), `category` (Sala/Laboratório/Secretaria, opcional).")
+        st.markdown("**Espaços** — colunas aceitas: `key_number`, `room_name`, `location` (opcional), `category` (opcional).")
         up_spaces = st.file_uploader("CSV de Espaços", type=["csv"], key="csv_spaces")
         if up_spaces is not None:
             dfs = pd.read_csv(up_spaces).fillna("")
@@ -1014,6 +1106,7 @@ if is_admin:
                 st.error("CSV inválido: colunas obrigatórias: key_number, room_name.")
             else:
                 dfs["category"] = dfs.get("category", "Sala").replace("", "Sala")
+                dfs["category"] = dfs["category"].apply(lambda x: x if x in CATEGORIES else "Sala")
                 st.dataframe(dfs.head(), use_container_width=True)
                 if st.button("Importar Espaços", key="csv_spaces_import"):
                     for _, r in dfs.iterrows():
@@ -1136,10 +1229,12 @@ if is_admin:
         else:
             st.dataframe(df_tk, use_container_width=True)
             tok = st.text_input("Token para revogar", key="tok_revoke")
+            st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
             if st.button("Revogar token (marcar como usado)", key="tok_revoke_btn"):
                 if tok.strip():
                     revoke_token(tok.strip())
                     st.success("Token revogado (marcado como usado).")
+            st.markdown('</div>', unsafe_allow_html=True)
 
 # -------- Recibos PDF --------
 if is_admin:
@@ -1169,17 +1264,3 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
