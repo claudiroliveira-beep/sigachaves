@@ -265,7 +265,14 @@ def update_person(pid: str, name: str, id_code: str, phone: str, is_active: bool
     }
     if pin is not None:
         payload["pin"] = pin if pin else None
-    s.table("persons").update(payload).eq("id", pid).execute()
+    s.table("persons").update(payload).eq("id", pid).execute
+  
+##OPCIONAL MAS RECOMENDADA - Inserido para apoiar a exclusao por nome
+def person_label(row: pd.Series) -> str:
+    """Rótulo legível: Nome • SIAPE/Matrícula • Telefone."""
+    idc = (row.get("id_code") or "").strip() or "-"
+    ph  = (row.get("phone") or "").strip() or "-"
+    return f"{row['name']} • {idc} • {ph}"
 
 def delete_person(pid: str) -> Tuple[bool, str]:
     s = supa()
@@ -1023,7 +1030,10 @@ if is_admin:
         st.markdown("---")
         st.markdown("**Excluir responsável**")
         if not df_pe.empty:
-            sel_pid_del = st.selectbox("Pessoa para excluir", options=df_pe["id"].tolist(), key="del_select")
+            sel_name_del = st.selectbox("Pessoa para excluir", options=df_pe["name"].tolist(), key="del_select")
+            sel_row_del = df_pe[df_pe["name"] == sel_name_del].iloc[0]
+            sel_pid_del = sel_row_del["id"]
+        
             st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
             col_d1, col_d2 = st.columns([1,3])
             with col_d1:
@@ -1037,6 +1047,7 @@ if is_admin:
                         if ok: st.success(msg)
                         else:  st.error(msg)
             st.markdown('</div>', unsafe_allow_html=True)
+
 
         st.markdown("___")
         st.subheader("Autorizações por espaço")
@@ -1264,3 +1275,4 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
