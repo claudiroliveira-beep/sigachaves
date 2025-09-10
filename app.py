@@ -213,6 +213,15 @@ def authorization_label(row: pd.Series, spaces_df: pd.DataFrame) -> str:
         pass
     return f"Chave {keyn}{room} • Memo {memo} • {vf} → {vt}"
 
+
+def space_label(row: pd.Series) -> str:
+    kn = row.get("key_number")
+    rn = row.get("room_name") or ""
+    loc = row.get("location") or ""
+    cat = row.get("category") or ""
+    extra = f" • {loc}" if loc else ""
+    return f"Chave {kn} — {rn}{extra} ({cat})"
+  
 # --------- Data access (Supabase) ----------
 # spaces
 def add_space(key_number: int, room_name: str, location: str = "", category: str = "Sala"):
@@ -1336,6 +1345,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
