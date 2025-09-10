@@ -1083,10 +1083,19 @@ if is_admin:
             st.markdown('</div>', unsafe_allow_html=True)
 
 
-
-
         st.markdown("___")
         st.subheader("Autorizações por espaço")
+        st.markdown(
+      """
+      <div style="background-color:#f5f5f5; padding:12px; border-radius:8px; color:#333; font-size:0.9rem; line-height:1.5;">
+          <span style="font-size:1.2rem; margin-right:6px;">ℹ️</span>
+          Neste espaço você pode adicionar somente pessoas que estarão vinculadas a 
+          <b>memorando ou circular</b>, como <i>bolsistas, voluntários de laboratórios ou estagiários</i>.
+      </div>
+      """,
+      unsafe_allow_html=True
+  )
+
         df_sp_act = list_spaces(active_only=True)
         if df_sp_act.empty:
             st.info("Cadastre espaços ativos para criar autorizações.")
@@ -1327,6 +1336,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
