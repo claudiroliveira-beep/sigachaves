@@ -1278,7 +1278,7 @@ if is_admin:
                                 url = build_url(base_url, {"sid": sid, "action": "devolver"})
                                 exp_txt = ""
                             img = make_qr(url)
-                            st.image(img, use_container_width=True)
+                            st.image(img, use_container_width="stretch")
                             st.caption(f"{lab}{exp_txt}")
                             st.caption(url)
                             images_for_zip.append((f"devolver_{sid[:8]}.png", to_png_bytes(img)))
@@ -1372,5 +1372,6 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
