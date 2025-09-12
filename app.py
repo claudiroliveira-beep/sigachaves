@@ -33,6 +33,10 @@ CATEGORIES = ["Sala", "Sala de Aula", "Laboratório", "Secretaria", "Coordenaç�
 
 st.markdown("""
 <style>
+/* Esconde o botão "Manage app" do Streamlit Cloud */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
 /* ====== Layout & Tabs ====== */
 .block-container { padding-top: 1.2rem; }
 .stTabs [data-baseweb="tab-list"] { gap: .5rem; }
@@ -1372,6 +1376,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
