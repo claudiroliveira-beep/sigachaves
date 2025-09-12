@@ -794,7 +794,7 @@ if is_admin:
                         token, exp = create_qr_token("retirar", sel_sid, sel_keyn, pid_val2, TOKEN_TTL_MINUTES)
                         url_checkout = build_url(base_url, {"sid": sel_sid, "action": "retirar", "pid": pid_val2, "token": token})
                         img_checkout = make_qr(url_checkout)
-                        st.image(img_checkout, use_container_width=False)
+                        st.image(img_checkout, use_container_width="content")
                         st.caption(url_checkout)
                         st.caption(f"Expira: {exp.astimezone().strftime('%d/%m/%Y %H:%M')} (validade {TOKEN_TTL_MINUTES} min)")
                         st.download_button("Baixar QR (PNG)", data=to_png_bytes(img_checkout),
@@ -1312,7 +1312,7 @@ if is_admin:
                 token, exp = create_qr_token("retirar", sel_sid, sel_keyn, pid_val2, TOKEN_TTL_MINUTES)
                 url_checkout = build_url(base_url, {"sid": sel_sid, "action": "retirar", "pid": pid_val2, "token": token})
                 img_checkout = make_qr(url_checkout)
-                st.image(img_checkout, use_container_width=False)
+                st.image(img_checkout, use_container_width="content")
                 st.caption(url_checkout)
                 st.caption(f"Expira: {exp.astimezone().strftime('%d/%m/%Y %H:%M')} (validade {TOKEN_TTL_MINUTES} min)")
                 st.download_button("Baixar QR (PNG)", data=to_png_bytes(img_checkout),
@@ -1372,4 +1372,5 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
