@@ -826,7 +826,7 @@ def render_public_reports():
     df_status = list_status()
     if sel_cat != "Todas":
         df_status = df_status[df_status["category"] == sel_cat]
-    st.dataframe(df_status[["key_number","room_name","location","category","status","taken_by_name"]], use_container_width=True)
+    st.dataframe(df_status[["key_number","room_name","location","category","status","taken_by_name"]], use_container_width="stretch")
     atrasadas = (df_status["status"] == "ATRASADA").sum()
     if atrasadas: st.error(f"⚠️ {atrasadas} chave(s) ATRASADA(s).")
 
@@ -835,7 +835,7 @@ def render_public_reports():
     df_tx = list_transactions()
     cols = ["key_number","taken_by_name","checkout_time","due_time","checkin_time","status"]
     cols = [c for c in cols if c in df_tx.columns]
-    st.dataframe(df_tx[cols].head(200), use_container_width=True)
+    st.dataframe(df_tx[cols].head(200), use_container_width="stretch")
 
 # -------- Devolução via QR (Público) --------
 def render_public_qr_return(space_id: Optional[str], key_number_fallback: Optional[int], token: Optional[str]):
@@ -973,7 +973,7 @@ if is_admin:
         df_sp = list_spaces(active_only=False)
         if not df_sp.empty:
             # mostrar também space_id para debug (oculto em produção, se quiser)
-            st.dataframe(df_sp, use_container_width=True)
+            st.dataframe(df_sp, use_container_width="stretch")
         else:
             st.info("Nenhum espaço cadastrado.")
 
@@ -1035,7 +1035,7 @@ if is_admin:
         st.markdown("___")
         st.subheader("Responsáveis")
         df_pe = list_persons(active_only=False)
-        st.dataframe(df_pe, use_container_width=True)
+        st.dataframe(df_pe, use_container_width="stretch")
 
         st.markdown("**Adicionar responsável**")
         p1, p2, p3, p4 = st.columns(4)
@@ -1164,7 +1164,7 @@ if is_admin:
                     pids = [x["person_id"] for x in df_link]
                     ppl = s.table("persons").select("name,id_code,phone").in_("id", pids).execute().data or []
                     st.write("Vinculados:")
-                    st.dataframe(pd.DataFrame(ppl), use_container_width=True)
+                    st.dataframe(pd.DataFrame(ppl), use_container_width="stretch")
 
         st.markdown("___")
         st.subheader("Importação CSV")
@@ -1175,7 +1175,7 @@ if is_admin:
             if "name" not in dfp.columns:
                 st.error("CSV inválido: coluna 'name' é obrigatória.")
             else:
-                st.dataframe(dfp.head(), use_container_width=True)
+                st.dataframe(dfp.head(), use_container_width="stretch")
                 if st.button("Importar Pessoas", key="csv_people_import"):
                     for _, r in dfp.iterrows():
                         pin_val = str(r.get("pin","")).strip()
@@ -1196,7 +1196,7 @@ if is_admin:
             else:
                 if "category" not in dfs.columns: dfs["category"] = "Sala"
                 dfs["category"] = dfs["category"].apply(lambda x: x if x in CATEGORIES else "Sala")
-                st.dataframe(dfs.head(), use_container_width=True)
+                st.dataframe(dfs.head(), use_container_width="stretch")
                 if st.button("Importar Espaços", key="csv_spaces_import"):
                     for _, r in dfs.iterrows():
                         try:
@@ -1219,7 +1219,7 @@ if is_admin:
         end_dt   = datetime.datetime.combine(dt_end,   datetime.time.max, tzinfo=datetime.timezone.utc) if dt_end   else None
 
         df_tx = list_transactions(start_dt, end_dt)
-        st.dataframe(df_tx, use_container_width=True)
+        st.dataframe(df_tx, use_container_width="stretch")
 
         total = len(df_tx)
         em_uso = sum(pd.isna(df_tx["checkin_time"])) if not df_tx.empty else 0
@@ -1330,7 +1330,7 @@ if is_admin:
         if df_tk.empty:
             st.info("Nenhum token encontrado.")
         else:
-            st.dataframe(df_tk, use_container_width=True)
+            st.dataframe(df_tk, use_container_width="stretch")
             tok = st.text_input("Token para revogar", key="tok_revoke")
             st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
             if st.button("Revogar token (marcar como usado)", key="tok_revoke_btn"):
@@ -1372,3 +1372,4 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
