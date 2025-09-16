@@ -14,7 +14,7 @@
 # - QR com ?sid=... (fallback para ?key=... quando necessário)
 # ==========================================
 import os, io, uuid, zipfile, secrets, string, base64
-from datetime import datetime, date, time, timezone
+from datetime import datetime, date, time, timezone, timedelta
 
 from typing import Optional, Tuple, List, Dict
 import numpy as np
@@ -1532,6 +1532,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
