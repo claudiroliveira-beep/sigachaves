@@ -34,62 +34,58 @@ CATEGORIES = ["Sala", "Sala de Aula", "Laboratório", "Secretaria", "Coordenaç�
 
 
 # Fundo personalizado
-# ====== Estilos e fundo (único bloco) ======
 st.markdown("""
 <style>
-/* Fundo da área principal */
-[data-testid="stAppViewContainer"] > .main {
-  background-image: url("https://postimg.cc/xc6SFZNZ/Untitled-design.png");
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-attachment: local;
+/* ===== Fundo aplicado na raiz do app ===== */
+html, body, [data-testid="stAppViewContainer"] {
+  background-image: url("https://i.postimg.cc/4xgNnkfX/Untitled-design.png") !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
 }
 
 /* Cabeçalho transparente */
-[data-testid="stHeader"] { background: rgba(0,0,0,0); }
+[data-testid="stHeader"] { background: rgba(0,0,0,0) !important; }
 
-/* Sidebar com leve fundo para legibilidade (opcional) */
+/* Sidebar translúcida (opcional) */
 [data-testid="stSidebar"] {
-  background: rgba(255,255,255,0.86);
+  background: rgba(255,255,255,0.86) !important;
   backdrop-filter: blur(2px);
 }
 
-/* Container principal com “cartão” translúcido para melhorar leitura (opcional) */
+/* Container principal – sem fundo, para não esconder a imagem */
 .block-container {
   padding-top: 1.2rem;
-  background: rgba(255,255,255,0.88);
+  background: transparent !important;   /* <— era aqui que cobria sua imagem */
   border-radius: 16px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  box-shadow: none;                      /* remova/ou ajuste se quiser sombra */
 }
 
 /* Esconde menu/rodapé/Manage App */
 #MainMenu { visibility: hidden; }
-#footer { visibility: hidden; }
-#header { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
 
-/* ====== Tabs ====== */
+/* Tabs */
 .stTabs [data-baseweb="tab-list"] { gap: .5rem; }
 .stTabs [data-baseweb="tab"] {
   background: #F5F7FB; padding: .5rem 1rem; border-radius: .75rem; font-weight: 600;
 }
 .stTabs [aria-selected="true"] { background: #E3F2FD; }
 
-/* ====== Badges de Status ====== */
+/* Badges */
 .badge { display:inline-block; padding: .18rem .5rem; border-radius: .5rem;
   font-size: .85rem; font-weight: 600; color: #fff; line-height: 1.2; }
-.badge-ok   { background:#4CAF50; }   /* DISPONÍVEL */
-.badge-use  { background:#2196F3; }   /* EM USO */
-.badge-late { background:#F44336; }   /* ATRASADA */
-.badge-off  { background:#9E9E9E; }   /* INATIVA */
+.badge-ok{background:#4CAF50;} .badge-use{background:#2196F3;}
+.badge-late{background:#F44336;} .badge-off{background:#9E9E9E;}
 
-/* ====== Tabela Listrada ====== */
+/* Tabela listrada */
 .table-clean { border-collapse: collapse; width: 100%; }
 .table-clean th { background:#EDEFF5; text-align:left; padding:.6rem; font-weight:700; }
 .table-clean td { background:#fff; padding:.55rem; border-top:1px solid #F0F2F6; }
 .table-clean tr:nth-child(even) td { background:#FAFBFE; }
 
-/* ====== Botões por Classe ====== */
+/* Botões por classe */
 .btn-primary  button { background:#2196F3 !important; color:#fff !important; border:0 !important; }
 .btn-success  button { background:#4CAF50 !important; color:#fff !important; border:0 !important; }
 .btn-warning  button { background:#FF9800 !important; color:#fff !important; border:0 !important; }
@@ -110,7 +106,7 @@ st.markdown("""
   background: inherit !important; color: #fff !important; border: 0 !important;
 }
 
-/* Estilo “danger” por id (compatível com bloco antigo) */
+/* Danger */
 #danger button { background:#F44336 !important; color:#fff !important; border:0 !important; }
 #danger button:hover { filter: brightness(0.95); }
 </style>
@@ -1407,6 +1403,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
