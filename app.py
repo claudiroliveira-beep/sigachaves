@@ -405,29 +405,23 @@ def list_authorized_people_now_by_space(space_id:str) -> pd.DataFrame:
     people = s.table("persons").select("*").in_("id", person_ids).eq("is_active", True).execute().data or []
     return pd.DataFrame(people)
 
-# tokens (com space_id)
-#def create_qr_token(action: str, space_id: str, key_number: Optional[int],
-#                    person_id: Optional[str], ttl_minutes: int = TOKEN_TTL_MINUTES) -> Tuple[str, datetime.datetime]:
-#    assert action in ("retirar", "devolver")
-#    token = gen_token_str(28)
-#    exp = now_utc() + datetime.timedelta(minutes=int(ttl_minutes))
-#    s = supa()
-#    s.table("qr_tokens").insert({
-#        "token": token,
-#        "action": action,
-#        "space_id": space_id,
-#        "key_number": key_number,
-#        "person_id": person_id,
-#        "expires_at": exp.isoformat(),
-#    }).execute()
-#    return token, exp
+#tokens (com space_id)
+def create_qr_token(action: str, key_number: int, person_id: Optional[str], ttl_minutes: int = TOKEN_TTL_MINUTES ) -> Tuple[str, datetime]:
+    assert action in ("retirar", "devolver")
+    token = gen_token_str(28)
+    exp = now_utc() + datetime.timedelta(minutes=int(ttl_minutes))
+    s = supa()
+    s.table("qr_tokens").insert({
+        "token": token,
+        "action": action,
+        "space_id": space_id,
+        "key_number": key_number,
+        "person_id": person_id,
+        "expires_at": exp.isoformat(),
+    }).execute()
+  
+    return token, exp
 
-def create_qr_token(
-    action: str,
-    key_number: int,
-    person_id: Optional[str],
-    ttl_minutes: int = TOKEN_TTL_MINUTES
-) -> Tuple[str, datetime]:
   
 def validate_qr_token(token: str, action: str, space_id: str, person_id: Optional[str] = None) -> Tuple[bool, str]:
     s = supa()
@@ -1430,6 +1424,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
