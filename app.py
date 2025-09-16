@@ -570,18 +570,27 @@ def do_checkin_by_space(space_id: str, signature_png: Optional[bytes]) -> Tuple[
     }).eq("id", tid).execute()
     return True, tid
 
-def list_transactions(start: Optional[datetime.datetime] = None,
-                      end: Optional[datetime.datetime] = None) -> pd.DataFrame:
+def list_transactions(start: Optional[datetime] = None,
+                      end: Optional[datetime] = None) -> pd.DataFrame:
     s = supa()
     q = s.table("transactions").select("*").order("checkout_time", desc=True)
-    if start: q = q.gte("checkout_time", start.isoformat())
+    if start:
+        q = q.gte("checkout_time", start.isoformat())
     data = q.execute().data or []
     df = pd.DataFrame(data)
+
     if end and not df.empty:
         def row_in(r):
-            ct = pd.to_datetime(r.get("checkin_time") or r.get("checkout_time"))
+            # considera checkin_time (se houver) ou checkout_time
+            ct_raw = r.get("checkin_time") or r.get("checkout_time")
+            try:
+                ct = pd.to_datetime(ct_raw)
+            except Exception:
+                return False
+            # normaliza sem tz pra comparar com 'end'
             return ct.tz_localize(None) <= end.replace(tzinfo=None)
         df = df[df.apply(row_in, axis=1)]
+
     return df
 
 def list_status() -> pd.DataFrame:
@@ -1472,6 +1481,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
