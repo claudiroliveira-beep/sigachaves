@@ -950,8 +950,8 @@ if is_admin:
                     if not df_auth_now.empty and not (df_auth_now["id"] == pid_val2).any():
                         st.warning("Pessoa não consta autorizada agora para este espaço (cadastre em Autorizações).")
                     if st.button("Gerar QR de Retirada (token único)", key="qr_checkout_make"):
-                        token, exp = create_qr_token("retirar", space_id=sid, key_number=keyn, person_id=pid, ttl_minutes=TOKEN_TTL_MINUTES)
-                        url_checkout = build_url(base_url, {"sid": sel_sid, "action": "retirar", "pid": pid_val2, "token": token})
+                        token, exp = create_qr_token("retirar", space_id=sel_sid, key_number=sel_keyn, person_id=pid_val2, ttl_minutes=TOKEN_TTL_MINUTES)
+                        url_checkout = build_url(base_url, {"sid": sel_sid, "key": sel_keyn, "action": "retirar", "pid": pid_val2, "token": token})
                         img_checkout = make_qr(url_checkout)
                         st.image(img_checkout, width="content")
                         st.caption(url_checkout)
@@ -1469,8 +1469,8 @@ if is_admin:
             pid_val2 = dfp_all[dfp_all["__label__"] == sel_person_label].iloc[0]["id"]
 
             if st.button("Gerar QR de Retirada (token único)", key="qr_checkout_make_admin"):
-                token, exp = create_qr_token("retirar", sel_sid, sel_keyn, pid_val2, TOKEN_TTL_MINUTES)
-                url_checkout = build_url(base_url, {"sid": sel_sid, "action": "retirar", "pid": pid_val2, "token": token})
+                token, exp = create_qr_token("retirar",space_id=sel_sid,key_number=sel_keyn,person_id=pid_val2,ttl_minutes=TOKEN_TTL_MINUTES)
+                url_checkout = build_url(base_url, {"sid": sel_sid, "key": sel_keyn, "action": "retirar", "pid": pid_val2, "token": token})
                 img_checkout = make_qr(url_checkout)
                 st.image(img_checkout, width="content")
                 st.caption(url_checkout)
@@ -1532,6 +1532,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
