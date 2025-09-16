@@ -34,31 +34,41 @@ CATEGORIES = ["Sala", "Sala de Aula", "Laboratório", "Secretaria", "Coordenaç�
 
 
 # Fundo personalizado
-page_bg_img = """
-<style>
-[data-testid="stAppViewContainer"] > .main {
-    background-image: url("https://postimg.cc/4xgNnkfX/Untitled-design.png");
-    background-size: cover;
-    background-position: center center;
-    background-repeat: no-repeat;
-    background-attachment: local;
-}
-[data-testid="stHeader"] {
-    background: rgba(0,0,0,0);
-}
-</style>
-"""
-st.markdown(page_bg_img, unsafe_allow_html=True)
-
-
+# ====== Estilos e fundo (único bloco) ======
 st.markdown("""
 <style>
-/* Esconde o botão "Manage app" do Streamlit Cloud */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
-/* ====== Layout & Tabs ====== */
-.block-container { padding-top: 1.2rem; }
+/* Fundo da área principal */
+[data-testid="stAppViewContainer"] > .main {
+  background-image: url("https://postimg.cc/4xgNnkfX/Untitled-design.png");
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: local;
+}
+
+/* Cabeçalho transparente */
+[data-testid="stHeader"] { background: rgba(0,0,0,0); }
+
+/* Sidebar com leve fundo para legibilidade (opcional) */
+[data-testid="stSidebar"] {
+  background: rgba(255,255,255,0.86);
+  backdrop-filter: blur(2px);
+}
+
+/* Container principal com “cartão” translúcido para melhorar leitura (opcional) */
+.block-container {
+  padding-top: 1.2rem;
+  background: rgba(255,255,255,0.88);
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+
+/* Esconde menu/rodapé/Manage App */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
+
+/* ====== Tabs ====== */
 .stTabs [data-baseweb="tab-list"] { gap: .5rem; }
 .stTabs [data-baseweb="tab"] {
   background: #F5F7FB; padding: .5rem 1rem; border-radius: .75rem; font-weight: 600;
@@ -105,6 +115,7 @@ header {visibility: hidden;}
 #danger button:hover { filter: brightness(0.95); }
 </style>
 """, unsafe_allow_html=True)
+
 
 ADMIN_PASS = st.secrets.get("STREAMLIT_ADMIN_PASS", os.getenv("STREAMLIT_ADMIN_PASS", ""))
 BASE_URL   = st.secrets.get("BASE_URL", os.getenv("BASE_URL", "")).strip()
@@ -1396,6 +1407,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
