@@ -25,6 +25,7 @@ from supabase import create_client, Client
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.units import mm
+from datetime import date, datetime, time, timezone
 
 
 # ---------------- Config -------------------
@@ -339,18 +340,33 @@ def get_person(pid: str) -> Optional[pd.Series]:
     return pd.Series(data[0])
 
 # authorizations
-def add_authorization_by_space(space_id:str, key_number: Optional[int], memo_number:str,
-                               valid_from:Optional[datetime.date], valid_to:Optional[datetime.date]) -> str:
+def _date_to_utc_start_iso(d: Optional[date]) -> Optional[str]:
+    if not d: 
+        return None
+    return datetime.combine(d, time.min, tzinfo=timezone.utc).isoformat()
+
+def _date_to_utc_end_iso(d: Optional[date]) -> Optional[str]:
+    if not d: 
+        return None
+    return datetime.combine(d, time.max, tzinfo=timezone.utc).isoformat()
+
+def add_authorization_by_space(space_id: str,
+                               key_number: int,
+                               memo_number: str,
+                               valid_from: Optional[date],
+                               valid_to: Optional[date]) -> str:
+    """Cria autorização para um espaço específico.
+       Converte dates para ISO UTC (strings) para o PostgREST aceitar.
+    """
     s = supa()
-    vf = datetime.datetime.combine(valid_from, datetime.time.min, tzinfo=datetime.timezone.utc) if valid_from else None
-    vt = datetime.datetime.combine(valid_to, datetime.time.max, tzinfo=datetime.timezone.utc) if valid_to else None
-    res = s.table("authorizations").insert({
-        "space_id": space_id,
-        "key_number": key_number,
-        "memo_number": memo_number,
-        "valid_from": vf.isoformat() if vf else None,
-        "valid_to": vt.isoformat() if vt else None
-    }).execute()
+    payload = {
+        "space_id": str(space_id),                 # garante string
+        "key_number": int(key_number),             # evita numpy.int64
+        "memo_number": (memo_number or "").strip(),
+        "valid_from": _date_to_utc_start_iso(valid_from),
+        "valid_to": _date_to_utc_end_iso(valid_to),
+    }
+    res = s.table("authorizations").insert(payload).execute()
     return res.data[0]["id"]
 
 def list_authorizations_by_space(space_id:str=None, key_number:int=None) -> pd.DataFrame:
@@ -1403,6 +1419,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
