@@ -950,7 +950,7 @@ if is_admin:
                     if not df_auth_now.empty and not (df_auth_now["id"] == pid_val2).any():
                         st.warning("Pessoa não consta autorizada agora para este espaço (cadastre em Autorizações).")
                     if st.button("Gerar QR de Retirada (token único)", key="qr_checkout_make"):
-                        token, exp = create_qr_token("retirar", sel_sid, sel_keyn, pid_val2, TOKEN_TTL_MINUTES)
+                        token, exp = create_qr_token("retirar", space_id=sid, key_number=keyn, person_id=pid, ttl_minutes=TOKEN_TTL_MINUTES)
                         url_checkout = build_url(base_url, {"sid": sel_sid, "action": "retirar", "pid": pid_val2, "token": token})
                         img_checkout = make_qr(url_checkout)
                         st.image(img_checkout, width="content")
@@ -1432,7 +1432,7 @@ if is_admin:
                             sid = row["space_id"]; keyn = row.get("key_number")
                             if use_token_return:
                                 token, exp = create_qr_token("devolver", space_id=sid, key_number=keyn, ttl_minutes=TOKEN_TTL_MINUTES)
-                                url = build_url(base_url, {"sid": sid, "action": "devolver", "token": token})
+                                url = build_url(base_url, {"sid": sid, "key": keyn, "action": "devolver", "token": token})
                                 exp_txt = f" (expira {exp.astimezone().strftime('%d/%m %H:%M')})"
                             else:
                                 url = build_url(base_url, {"sid": sid, "action": "devolver"})
@@ -1532,6 +1532,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
