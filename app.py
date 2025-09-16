@@ -143,7 +143,7 @@ def supa() -> Client:
 #    return datetime.datetime.now(datetime.timezone.utc)
   
 def now_utc() -> datetime:
-    return datetime.now(timezone.utc
+    return datetime.now(timezone.utc)
                         
 def to_png_bytes(img: Image.Image) -> bytes:
     buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0); return buf.read()
@@ -1423,6 +1423,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
