@@ -853,9 +853,9 @@ if is_admin:
         if modo == "Retirar":
             due_choice = st.selectbox("Prazo de devolução", ["Hoje 12:00","Hoje 18:00","Outro","Sem prazo"], key="op_due_choice")
             if due_choice == "Hoje 12:00":
-                today = datetime.date.today(); due_time = datetime.datetime.combine(today, datetime.time(12,0, tzinfo=datetime.timezone.utc))
+                today = date.today() due_time = datetime.combine(today, time(12,0, tzinfo=timezone.utc))
             elif due_choice == "Hoje 18:00":
-                today = datetime.date.today(); due_time = datetime.datetime.combine(today, datetime.time(18,0, tzinfo=datetime.timezone.utc))
+                today = date.today() due_time = datetime.combine(today, time(18,0, tzinfo=timezone.utc))
             elif due_choice == "Outro":
                 due_time = st.datetime_input("Selecione data/hora prevista (UTC)", key="op_due_dt")
             else:
@@ -1042,6 +1042,7 @@ def render_public_qr_checkout(space_id: Optional[str], key_number_fallback: Opti
     if due_opt == "Hoje 18:00":
         today = datetime.date.today()
         due_time = datetime.datetime.combine(today, datetime.time(18,0, tzinfo=datetime.timezone.utc))
+
     else:
         due_time = None
 
@@ -1481,6 +1482,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
