@@ -13,7 +13,9 @@
 # - UI com notas (bloco cinza com ícone)
 # - QR com ?sid=... (fallback para ?key=... quando necessário)
 # ==========================================
-import os, io, uuid, datetime, zipfile, secrets, string, base64, hashlib
+import os, io, uuid, zipfile, secrets, string, base64
+from datetime import datetime, date, time, timezone
+
 from typing import Optional, Tuple, List, Dict
 import numpy as np
 import pandas as pd
@@ -25,7 +27,6 @@ from supabase import create_client, Client
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.units import mm
-from datetime import date, datetime, time, timezone
 
 
 # ---------------- Config -------------------
@@ -138,9 +139,12 @@ def supa() -> Client:
         st.stop()
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-def now_utc() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
-
+#def now_utc() -> datetime.datetime:
+#    return datetime.datetime.now(datetime.timezone.utc)
+  
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc
+                        
 def to_png_bytes(img: Image.Image) -> bytes:
     buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0); return buf.read()
 
@@ -1419,6 +1423,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
