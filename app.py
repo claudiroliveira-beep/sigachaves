@@ -405,42 +405,92 @@ def list_authorized_people_now_by_space(space_id:str) -> pd.DataFrame:
     return pd.DataFrame(people)
 
 #tokens (com space_id)
-def create_qr_token(action: str, key_number: int, person_id: Optional[str], ttl_minutes: int = TOKEN_TTL_MINUTES ) -> Tuple[str, datetime]:
+def create_qr_token(
+    action: str,
+    space_id: Optional[str] = None,
+    key_number: Optional[int] = None,
+    person_id: Optional[str] = None,
+    ttl_minutes: int = TOKEN_TTL_MINUTES,
+) -> Tuple[str, datetime]:
+    """
+    Cria token de uso único para QR.
+    - Aceita space_id e/ou key_number (pelo menos um).
+    - person_id é obrigatório para retirada (quando você quer amarrar a pessoa).
+    """
     assert action in ("retirar", "devolver")
+    if space_id is None and key_number is None:
+        raise ValueError("Informe space_id e/ou key_number ao criar o token.")
+
     token = gen_token_str(28)
-    exp = now_utc() + datetime.timedelta(minutes=int(ttl_minutes))
+    exp = datetime.now(timezone.utc) + timedelta(minutes=int(ttl_minutes))
+
     s = supa()
-    s.table("qr_tokens").insert({
+    payload = {
         "token": token,
         "action": action,
-        "space_id": space_id,
-        "key_number": key_number,
+        "space_id": str(space_id) if space_id else None,
+        "key_number": int(key_number) if key_number is not None else None,
         "person_id": person_id,
         "expires_at": exp.isoformat(),
-    }).execute()
-  
+    }
+    s.table("qr_tokens").insert(payload).execute()
     return token, exp
 
   
-def validate_qr_token(token: str, action: str, space_id: str, person_id: Optional[str] = None) -> Tuple[bool, str]:
+def validate_qr_token(
+    token: str,
+    action: str,
+    space_id: Optional[str] = None,
+    key_number: Optional[int] = None,
+    person_id: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """
+    Valida token:
+    - confere ação (retirar/devolver)
+    - confere espaço e/ou key_number se fornecidos (URL/contexto)
+    - confere person_id se fornecido (retirada amarrada a pessoa)
+    - checa expiração e uso anterior
+    """
     s = supa()
     data = s.table("qr_tokens").select("*").eq("token", token).limit(1).execute().data
-    if not data: return False, "Token inválido."
+    if not data:
+        return False, "Token inválido."
     row = data[0]
-    if row["action"] != action: return False, "Token não corresponde a esta operação."
-    if row.get("space_id") != space_id: return False, "Token não corresponde a este espaço."
-    if person_id is not None and row.get("person_id") != person_id: return False, "Token não corresponde à pessoa."
-    if row.get("used_at"): return False, "Token já utilizado."
+
+    # ação
+    if row.get("action") != action:
+        return False, "Token não corresponde a esta operação."
+
+    # espaço (se foi informado no contexto e também gravado no token, precisa bater)
+    if space_id is not None and row.get("space_id") and str(row["space_id"]) != str(space_id):
+        return False, "Token não corresponde a este espaço."
+
+    # key_number (mesma lógica)
+    if key_number is not None and (row.get("key_number") is not None) and int(row["key_number"]) != int(key_number):
+        return False, "Token não corresponde a esta chave."
+
+    # pessoa (se amarrado a pessoa, precisa bater)
+    if person_id is not None and row.get("person_id") and row["person_id"] != person_id:
+        return False, "Token não corresponde à pessoa."
+
+    # já usado?
+    if row.get("used_at"):
+        return False, "Token já utilizado."
+
+    # expirado?
     try:
-        if now_utc() > datetime.datetime.fromisoformat(row["expires_at"].replace("Z","+00:00")):
+        exp = row.get("expires_at")
+        if exp and datetime.now(timezone.utc) > datetime.fromisoformat(str(exp).replace("Z", "+00:00")):
             return False, "Token expirado."
     except Exception:
         return False, "Falha na validação do token."
+
     return True, ""
 
 def consume_qr_token(token: str):
     s = supa()
-    s.table("qr_tokens").update({"used_at": now_utc().isoformat()}).eq("token", token).is_("used_at", "null").execute()
+    s.table("qr_tokens").update({"used_at": datetime.now(timezone.utc).isoformat()})\
+        .eq("token", token).is_("used_at", "null").execute()
 
 def list_tokens(status: str = "ativos") -> pd.DataFrame:
     s = supa()
@@ -1482,6 +1532,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
