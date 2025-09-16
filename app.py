@@ -1381,7 +1381,7 @@ if is_admin:
                             row = df_sp_act[df_sp_act["__label__"] == lab].iloc[0]
                             sid = row["space_id"]; keyn = row.get("key_number")
                             if use_token_return:
-                                token, exp = create_qr_token("devolver", sid, keyn, None, TOKEN_TTL_MINUTES)
+                                token, exp = create_qr_token("devolver", space_id=sid, key_number=keyn, ttl_minutes=TOKEN_TTL_MINUTES)
                                 url = build_url(base_url, {"sid": sid, "action": "devolver", "token": token})
                                 exp_txt = f" (expira {exp.astimezone().strftime('%d/%m %H:%M')})"
                             else:
@@ -1482,6 +1482,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
