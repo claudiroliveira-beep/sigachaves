@@ -1325,8 +1325,8 @@ if is_admin:
         colr1, colr2 = st.columns(2)
         with colr1: dt_start = st.date_input("Início (opcional)", key="rep_start")
         with colr2: dt_end   = st.date_input("Fim (opcional)", key="rep_end")
-        start_dt = datetime.datetime.combine(dt_start, datetime.time.min, tzinfo=datetime.timezone.utc) if dt_start else None
-        end_dt   = datetime.datetime.combine(dt_end,   datetime.time.max, tzinfo=datetime.timezone.utc) if dt_end   else None
+        start_dt = datetime.combine(dt_start, time.min, tzinfo=timezone.utc) if dt_start else None
+        end_dt = datetime.combine(dt_end, time.max, tzinfo=timezone.utc) if dt_end else None
 
         df_tx = list_transactions(start_dt, end_dt)
         st.dataframe(df_tx, width="stretch")
@@ -1482,6 +1482,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
