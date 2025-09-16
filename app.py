@@ -345,27 +345,26 @@ def get_person(pid: str) -> Optional[pd.Series]:
 
 # authorizations
 def _date_to_utc_start_iso(d: Optional[date]) -> Optional[str]:
-    if not d: 
+    if not d:
         return None
     return datetime.combine(d, time.min, tzinfo=timezone.utc).isoformat()
 
 def _date_to_utc_end_iso(d: Optional[date]) -> Optional[str]:
-    if not d: 
+    if not d:
         return None
     return datetime.combine(d, time.max, tzinfo=timezone.utc).isoformat()
+
 
 def add_authorization_by_space(space_id: str,
                                key_number: int,
                                memo_number: str,
                                valid_from: Optional[date],
                                valid_to: Optional[date]) -> str:
-    """Cria autorização para um espaço específico.
-       Converte dates para ISO UTC (strings) para o PostgREST aceitar.
-    """
+    """Cria autorização para um espaço específico (fecha JSON corretamente)."""
     s = supa()
     payload = {
-        "space_id": str(space_id),                 # garante string
-        "key_number": int(key_number),             # evita numpy.int64
+        "space_id": str(space_id),
+        "key_number": int(key_number),
         "memo_number": (memo_number or "").strip(),
         "valid_from": _date_to_utc_start_iso(valid_from),
         "valid_to": _date_to_utc_end_iso(valid_to),
@@ -1424,6 +1423,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
