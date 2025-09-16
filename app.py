@@ -65,8 +65,8 @@ st.markdown("""
 
 /* Esconde menu/rodapé/Manage App */
 #MainMenu { visibility: hidden; }
-footer { visibility: hidden; }
-header { visibility: hidden; }
+#footer { visibility: hidden; }
+#header { visibility: hidden; }
 
 /* ====== Tabs ====== */
 .stTabs [data-baseweb="tab-list"] { gap: .5rem; }
@@ -1407,6 +1407,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
