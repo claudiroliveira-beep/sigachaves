@@ -39,7 +39,7 @@ st.markdown("""
 <style>
 /* Fundo da área principal */
 [data-testid="stAppViewContainer"] > .main {
-  background-image: url("https://postimg.cc/4xgNnkfX/Untitled-design.png");
+  background-image: url("https://postimg.cc/xc6SFZNZ/Untitled-design.png");
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
@@ -1407,6 +1407,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
