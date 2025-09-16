@@ -467,7 +467,7 @@ def has_open_checkout_by_space(space_id: str) -> bool:
     return bool(data)
 
 def open_checkout_by_space(space_id: str, name: str, id_code: str, phone: str,
-                           due_time: Optional[datetime.datetime], signature_png: Optional[bytes]) -> Tuple[bool, str]:
+                           due_time: Optional[datetime.datetime], signature_png: Optional[bytes]) -> Tuple[str, datetime]:
     sp = space_by_id(space_id)
     if sp is None or not bool(sp.get("is_active", True)):
         return False, "Espaço não está cadastrado/ativo."
@@ -1424,6 +1424,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
