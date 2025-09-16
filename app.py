@@ -459,43 +459,92 @@ def revoke_token(token: str) -> None:
     consume_qr_token(token)
 
 # transactions (por space_id)
+def get_space_by_id(space_id: str) -> Optional[dict]:
+    s = supa()
+    res = s.table("spaces").select("*").eq("space_id", str(space_id)).limit(1).execute().data
+    return res[0] if res else None
+
 def has_open_checkout_by_space(space_id: str) -> bool:
     s = supa()
-    data = s.table("transactions").select("id").eq("space_id", space_id).is_("checkin_time", "null")\
-        .order("checkout_time", desc=True).limit(1).execute().data
+    data = (
+        s.table("transactions")
+         .select("id")
+         .eq("space_id", str(space_id))
+         .is_("checkin_time", "null")
+         .order("checkout_time", desc=True)
+         .limit(1)
+         .execute()
+         .data
+    )
     return bool(data)
 
-def open_checkout_by_space(space_id: str, name: str, id_code: str, phone: str,
-                           due_time: Optional[datetime.datetime], signature_png: Optional[bytes]) -> Tuple[str, datetime]:
-    sp = space_by_id(space_id)
-    if sp is None or not bool(sp.get("is_active", True)):
-        return False, "Espaço não está cadastrado/ativo."
+def space_is_active_by_id(space_id: str) -> bool:
+    s = supa()
+    data = (
+        s.table("spaces")
+         .select("space_id")
+         .eq("space_id", str(space_id))
+         .eq("is_active", True)
+         .limit(1)
+         .execute()
+         .data
+    )
+    return bool(data)
+
+
+# --- Open checkout por space_id (usa ISO 8601 e base64) ---
+
+def open_checkout_by_space(
+    space_id: str,
+    name: str,
+    id_code: str,
+    phone: str,
+    due_time: Optional[datetime],
+    signature_png: Optional[bytes],
+) -> Tuple[bool, str]:
+    """
+    Abre retirada para um espaço específico (PK = space_id).
+    - Evita duplicidade (já em uso).
+    - Serializa datas como ISO 8601 (UTC).
+    - Assinatura (PNG) em base64.
+    - Mantém key_number no registro (se existir no espaço).
+    """
+    # valida espaço
+    sp = get_space_by_id(space_id)
+    if not sp:
+        return False, "Espaço não encontrado."
+    if not sp.get("is_active", False):
+        return False, "Espaço inativo. Ative-o em Cadastros → Espaços."
+
+    # valida nome
     name = (name or "").strip()
     if not name:
         return False, "Informe o nome de quem está retirando a chave."
+
+    # já em uso?
     if has_open_checkout_by_space(space_id):
-        return False, "Este espaço já está EM USO. Faça a devolução antes de nova retirada."
+        return False, "Esta chave já está EM USO. Faça a devolução antes de nova retirada."
 
-    sig_out_b64  = encode_bytea(signature_png) if signature_png else None
-    sig_out_hash = sha256_hex(signature_png) if signature_png else None
+    # prepara campos
+    key_number = sp.get("key_number")  # opcional (pode ser None)
+    sig_out_b64 = encode_bytea(signature_png) if signature_png else None
 
-    s = supa()
     payload = {
-        "space_id": space_id,
-        "key_number": int(sp.get("key_number") or 0),  # histórico do número impresso
+        "space_id": str(space_id),
+        "key_number": int(key_number) if key_number is not None else None,
         "taken_by_name": name,
         "taken_by_id": (id_code or "").strip(),
         "taken_phone": (phone or "").strip(),
-        "checkout_time": now_utc().isoformat(),
+        "checkout_time": datetime.now(timezone.utc).isoformat(),
         "due_time": due_time.isoformat() if due_time else None,
         "checkin_time": None,
         "status": "EM_USO",
         "signature_out": sig_out_b64,
-        "signature_out_hash": sig_out_hash,
         "signature_in": None,
-        "signature_in_hash": None
     }
+
     try:
+        s = supa()
         res = s.table("transactions").insert(payload).execute()
         return True, res.data[0]["id"]
     except Exception:
@@ -1423,6 +1472,7 @@ if (not is_admin) and public_qr_return:
 if (not is_admin):
     with tab_pub:
         render_public_reports()
+
 
 
 
